@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 )
 
 // 16 KiB file part size (except the last one)
@@ -49,6 +50,9 @@ func CalculateShasum(filePath string) string {
 }
 
 func SplitFile(filePath string, destination string) ([]filePart, error) {
+
+	// We get the name of the file
+	fileName := filePath[strings.LastIndex(filePath, "/")+1:]
 	// We read the size of the file
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
@@ -68,6 +72,14 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 	}
 	defer file.Close()
 
+	//if the parts destination folder does not exist, we create it
+	if _, err := os.Stat(destination); os.IsNotExist(err) {
+		err = os.Mkdir(destination, 0755)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("could not create destination folder: %v", err)
+	}
+
 	for i := uint(0); i < numberOfParts; i++ {
 		partSize := FILE_PART_SIZE
 		if i == numberOfParts-1 {
@@ -81,7 +93,7 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 		}
 
 		// We create a file in the subfolder destination with the content of the file part
-		partFileName := fmt.Sprintf("%s/part_%d", destination, i)
+		partFileName := fmt.Sprintf("%s/%s_part_%d", destination, fileName, i)
 		err = os.WriteFile(partFileName, filePartContent, 0644)
 		if err != nil {
 			return nil, fmt.Errorf("could not write file part: %v", err)
@@ -92,7 +104,7 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 			return nil, fmt.Errorf("could not calculate shasum: %v", err)
 		} else {
 			fileParts[i] = filePart{
-				parentFileID:   "",
+				parentFileID:   partFileName,
 				filePartSize:   partSize,
 				filePartShasum: filePartShasum,
 			}
