@@ -53,6 +53,8 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 
 	// We get the name of the file
 	fileName := filePath[strings.LastIndex(filePath, "/")+1:]
+	// Remove file extension
+	fileNameWithoutExt := fileName[:strings.LastIndex(fileName, ".")]
 	// We read the size of the file
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
@@ -93,7 +95,7 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 		}
 
 		// We create a file in the subfolder destination with the content of the file part
-		partFileName := fmt.Sprintf("%s/%s_part_%d", destination, fileName, i)
+		partFileName := fmt.Sprintf("%s/%s_part%d", destination, fileNameWithoutExt, i)
 		err = os.WriteFile(partFileName, filePartContent, 0644)
 		if err != nil {
 			return nil, fmt.Errorf("could not write file part: %v", err)
@@ -113,6 +115,45 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 	}
 
 	return fileParts, nil
+}
+
+func (r *Registre) GetFileByID(fileID string) *file {
+	for i, file := range r.files {
+		if file.ID == fileID {
+			return &r.files[i]
+		}
+	}
+	fmt.Printf("File with ID %s not found\n", fileID)
+	return nil
+}
+
+func (r *Registre) PutAllFilesFromDirectoryInRegister(source string, destination string) {
+	files, err := os.ReadDir(source)
+	if err != nil {
+		fmt.Printf("Error reading directory: %v\n", err)
+		return
+	}
+	for _, fileTreated := range files {
+		if !fileTreated.IsDir() {
+			filePath := source + "/" + fileTreated.Name()
+			fileParts, err := SplitFile(filePath, destination)
+			if err != nil {
+				fmt.Printf("Error splitting file: %v\n", err)
+				continue
+			}
+			fileInfo, _ := fileTreated.Info()
+			fileSize := fileInfo.Size()
+			newFile := file{
+				name:          fileTreated.Name(),
+				ID:            CalculateShasum(filePath),
+				size:          uint(fileSize),
+				numberOfParts: uint(len(fileParts)),
+				fileParts:     fileParts,
+			}
+			r.AddFile(newFile)
+			initialisationFileCopy(newFile, "site1")
+		}
+	}
 }
 
 func initialisationFileCopy(file file, siteID string) {
