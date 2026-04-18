@@ -9,57 +9,61 @@ import (
 
 
 type Message = struct {
-	action string
-	id string
-	object string
-	chunk int
-	checksum string
+	Action string
+	Id string
+	Object string
+	Chunk int
 	payload_len int
-	payload string
+	Payload string
 }
 
 // ACTION:qlksdjfqmlsdfjmqsdlkf
 // ID:slkdjfmqldskjf
 // OBJECT:sldkfjsdlkf
 // CHUNK:1
-// CHECKSUM:smldskqsdfmjlk
 // PAYLOAD_LEN:123
 // <payload_qlksdjfmlqksdjflkqsd>
 
+// Mandatory fields: ACTION,ID
+// if no PAYLOAD_LEN, then no payload
+// if len(payload) == 0, then no payload & payload_len is send
+
 
 // string -> Message, \n is the sep
-func decode(raw_data string) (Message, error) {
+func Decode(raw_data string) (Message, error) {
 	lines := strings.Split(raw_data, "\n")
 	msg := Message{}
 
-	for _, l := range lines {
+	for i, l := range lines {
+		if (l == "\n" || l == "") {
+			continue
+		}
 		parts := strings.Split(l, ":")
+		if (parts[0] == "\n" || parts[0] == "") {
+			continue
+		}
 		if (len(parts) != 2) {
-			return Message{}, errors.New("Message line must have exactly 2 component.")
+			return Message{}, errors.New("Message line must have exactly 2 component. Found: " + strings.Join(parts, " "))
 		}
 		key   := parts[0]
 		value := parts[1]
 
 		switch (key) {
 		case "ACTION": {
-			msg.action = value
+			msg.Action = value
 		}
 		case "ID": {
-			msg.id     = value
+			msg.Id     = value
 		}
 		case "OBJECT": {
-			msg.object = value
+			msg.Object = value
 		}
 		case "CHUNK": {
 			val, err := strconv.Atoi(value)
 			if err != nil {
 				return Message{}, errors.New("Impossible to chunk nb")
-
 			}
-			msg.chunk = val
-		}
-		case "CHECKSUM": {
-			msg.checksum = value
+			msg.Chunk = val
 		}
 		case "PAYLOAD_LEN": {
 			val, err := strconv.Atoi(value)
@@ -67,43 +71,47 @@ func decode(raw_data string) (Message, error) {
 				return Message{}, errors.New("Impossible to payload_len")
 			}
 			msg.payload_len = val
-			utils.TODO("implement payload decode")
+			msg.Payload = lines[i + 1]
+			if len(msg.Payload) <= 0 {
+				return Message{}, errors.New("Provided payload len but no payload")
+			}
+
+			return msg, nil // return now
+		}
+		default:{
+			return Message{}, errors.New("Found unknonw field: " + key)
 		}
 		}
 	}
 	return msg, nil
 }
 
-func encode(msg Message) (string, error) {
+func Encode(msg Message) (string, error) {
 	data := make([]string, 2)
 
-	if msg.action == ""{
+	if msg.Action == ""{
 		return "", errors.New("Empty action")
 	} else {
-		data = append(data, "ACTION:" + msg.action)
+		data = append(data, "ACTION:" + msg.Action)
 	}
 
-	if msg.id == ""{
+	if msg.Id == ""{
 		utils.TODO("Set uuid")
 	}
-	data = append(data, "ID:" + msg.id)
+	data = append(data, "ID:" + msg.Id)
 
-	if msg.object != ""{
-		data = append(data, "OBJECT:" + msg.object)
+	if msg.Object != ""{
+		data = append(data, "OBJECT:" + msg.Object)
 	}
 
-	if msg.chunk != -1{
-		data = append(data, "CHUNK:" + strconv.Itoa(msg.chunk))
+	if msg.Chunk != -1{
+		data = append(data, "CHUNK:" + strconv.Itoa(msg.Chunk))
 	}
 
-	if msg.checksum != ""{
-		utils.TODO("Calculate checksum")
-	}
-
-	payload_len := len(msg.payload)
+	payload_len := len(msg.Payload)
 	if payload_len > 0 {
 		data = append(data, "PAYLOAD_LEN:" + strconv.Itoa(payload_len))
-		data = append(data, msg.payload)
+		data = append(data, msg.Payload)
 	}
 		
 	return strings.Join(data, "\n"), nil
