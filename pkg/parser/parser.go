@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"HomemadeTorrent/pkg/utils"
+    "github.com/google/uuid"
 	"errors"
 	"strconv"
 	"strings"
@@ -27,6 +27,7 @@ type Message = struct {
 // Mandatory fields: ACTION,ID
 // if no PAYLOAD_LEN, then no payload
 // if len(payload) == 0, then no payload & payload_len is send
+// chunk is zero indexed, -1 indicates no chunk
 
 
 // string -> Message, \n is the sep
@@ -87,7 +88,7 @@ func Decode(raw_data string) (Message, error) {
 }
 
 func Encode(msg Message) (string, error) {
-	data := make([]string, 2)
+	data := make([]string, 0, 10)
 
 	if msg.Action == ""{
 		return "", errors.New("Empty action")
@@ -96,7 +97,7 @@ func Encode(msg Message) (string, error) {
 	}
 
 	if msg.Id == ""{
-		utils.TODO("Set uuid")
+		msg.Id = uuid.New().String()
 	}
 	data = append(data, "ID:" + msg.Id)
 

@@ -50,3 +50,41 @@ func TestEncode(t *testing.T) {
 		return;
 	}
 }
+
+func TestDecode(t *testing.T) {
+	// no action/chunk/payload
+	str, err := Encode(Message{
+		Action: "bijour",
+		Id: "je-suis-un-uuid",
+		Chunk: -1,
+	})
+	if err != nil {
+		t.Errorf("Should not have errored: %s", err)
+		return;
+	}
+	res := "ACTION:bijour\nID:je-suis-un-uuid"
+	if str != res {
+		t.Errorf("Encode operation should have produced '%s', but found %s", res, str)
+	}
+
+	// error
+	str, err = Encode(Message{
+		Action: "",
+		Id: "je-suis-un-uuid",
+		Chunk: -1,
+	})
+	if err == nil { // missing action
+		t.Errorf("Should have errored but not")
+		return;
+	}
+
+	// generating uuid
+	str, err = Encode(Message{
+		Action: "action",
+		Chunk: -1,
+	})
+	if err != nil { // missing action
+		t.Errorf("Should not have errored, but found %s", err)
+		return;
+	}
+}
