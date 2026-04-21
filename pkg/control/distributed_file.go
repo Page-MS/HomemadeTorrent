@@ -21,14 +21,15 @@ type TabEntry struct {
 type DistributedFile struct {
 	EstampClock clock.LamportClock
 	Tab         []TabEntry
-	siteIndex   int
+	siteIndex   int // Conversion Id site en index dans la logique du controleur
 }
 
 // ------------- Structure Message traité par la file ----------------------
 // La conversion du message brut reçut en message de ce type ce fait dans la logique du controleur en amont
 type Message struct {
 	Type        MessageType
-	indexSender int
+	indexSender int // Conversion Id site en index dans la logique du controleur
+	indexDest   int
 }
 
 func GetNewDistributedFile(n int, siteIndex int) *DistributedFile {
@@ -58,5 +59,20 @@ func (df *DistributedFile) SCRequestFromBaseApp() Message {
 	return Message{
 		Type:        SC_REQUEST,
 		indexSender: df.siteIndex,
+		indexDest:   -1, // Index du broadcast
+	}
+}
+
+func (df *DistributedFile) SCStopFromBaseApp() Message {
+	df.EstampClock.Tick()
+	df.Tab[df.siteIndex] = TabEntry{
+		Type: SC_LIBERATION,
+		Date: df.EstampClock.GetValue(),
+	}
+
+	return Message{
+		Type:        SC_LIBERATION,
+		indexSender: df.siteIndex,
+		indexDest:   -1, // Index du broadcast
 	}
 }
