@@ -2,7 +2,6 @@ package control
 
 import (
 	"HomemadeTorrent/pkg/clock"
-	"strconv"
 )
 
 // ------------- Types et Structures file -----------------------
@@ -104,10 +103,10 @@ func (df *DistributedFile) SCRequestFromNetwork(msg Message) (Message, bool) {
 }
 
 func compareTab(tab []TabEntry, siteIndex int) bool {
-	reqSite := Request{tab[siteIndex].Date, strconv.Itoa(siteIndex)}
+	reqSite := Request{tab[siteIndex].Date, siteIndex}
 	for i := 0; i < len(tab); i++ {
 		if i != siteIndex {
-			req := Request{tab[i].Date, strconv.Itoa(i)}
+			req := Request{tab[i].Date, i}
 			if !EstPrioritaire(reqSite, req) {
 				return false
 			}
