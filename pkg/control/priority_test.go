@@ -1,4 +1,4 @@
-package controle
+package control
 
 import "testing"
 

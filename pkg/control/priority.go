@@ -1,6 +1,6 @@
-package controle
+package control
 
-// Request est une structure simplifié (permet au controleur de comparer des requetes sans avoir a manipuler le message complet)
+// Request est une structure simplifiée (permet au controleur de comparer des requetes sans avoir a manipuler le message complet)
 type Request struct {
 	Stamp  int // estampille de Lamport extraite du message
 	SiteID string
