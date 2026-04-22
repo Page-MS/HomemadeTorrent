@@ -102,6 +102,39 @@ func (df *DistributedFile) SCRequestFromNetwork(msg Message) (Message, bool) {
 	return ack, isScReadyForApp
 }
 
+func (df *DistributedFile) SCStopFromNetwork(msg Message) bool {
+	df.EstampClock.Update(msg.ClockValue)
+	df.Tab[msg.IndexSender] = TabEntry{
+		Type: SC_LIBERATION,
+		Date: msg.ClockValue,
+	}
+
+	isScReadyForApp := false
+	if df.Tab[df.SiteIndex].Type == SC_REQUEST && compareTab(df.Tab, df.SiteIndex) {
+		isScReadyForApp = true
+	}
+
+	return isScReadyForApp
+}
+
+func (df *DistributedFile) AckFromNetwork(msg Message) bool {
+	df.EstampClock.Update(msg.ClockValue)
+
+	if df.Tab[msg.IndexSender].Type != SC_REQUEST {
+		df.Tab[msg.IndexSender] = TabEntry{
+			Type: ACK,
+			Date: msg.ClockValue,
+		}
+	}
+
+	isScReadyForApp := false
+	if df.Tab[df.SiteIndex].Type == SC_REQUEST && compareTab(df.Tab, df.SiteIndex) {
+		isScReadyForApp = true
+	}
+
+	return isScReadyForApp
+}
+
 func compareTab(tab []TabEntry, siteIndex int) bool {
 	reqSite := Request{tab[siteIndex].Date, siteIndex}
 	for i := 0; i < len(tab); i++ {
