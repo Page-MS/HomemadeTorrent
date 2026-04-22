@@ -33,11 +33,13 @@ type Message struct {
 	ClockValue  int
 }
 
-func GetNewDistributedFile(n int, SiteIndex int) *DistributedFile {
+// Renvoie une instance de file répartie
+// n le nombre de site du réseau, siteIndex l'index du site host de cette instance
+func GetNewDistributedFile(n int, siteIndex int) *DistributedFile {
 	df := &DistributedFile{
 		EstampClock: clock.LamportClock{},
 		Tab:         make([]TabEntry, n),
-		SiteIndex:   SiteIndex,
+		SiteIndex:   siteIndex,
 	}
 
 	for i := 0; i < n; i++ {
@@ -50,6 +52,7 @@ func GetNewDistributedFile(n int, SiteIndex int) *DistributedFile {
 	return df
 }
 
+// Traite une demande de section critique venant de l'app du site
 func (df *DistributedFile) SCRequestFromBaseApp() Message {
 	df.EstampClock.Tick()
 	df.Tab[df.SiteIndex] = TabEntry{
@@ -65,6 +68,7 @@ func (df *DistributedFile) SCRequestFromBaseApp() Message {
 	}
 }
 
+// Traite une demande de libération de section critique venant de l'app du site
 func (df *DistributedFile) SCStopFromBaseApp() Message {
 	df.EstampClock.Tick()
 	df.Tab[df.SiteIndex] = TabEntry{
@@ -80,6 +84,9 @@ func (df *DistributedFile) SCStopFromBaseApp() Message {
 	}
 }
 
+// Traite une demande de section critique ne venant pas de l'app du site
+// Renvoie le message de réponse à cette requete et un boolen indiquant si l'app du site peut entrer en section critique
+// msg la requete à traiter
 func (df *DistributedFile) SCRequestFromNetwork(msg Message) (Message, bool) {
 	df.EstampClock.Update(msg.ClockValue)
 	df.Tab[msg.IndexSender] = TabEntry{
@@ -102,6 +109,9 @@ func (df *DistributedFile) SCRequestFromNetwork(msg Message) (Message, bool) {
 	return ack, isScReadyForApp
 }
 
+// Traite une demande de libération de section critique ne venant pas de l'app du site
+// Renvoie un boolen indiquant si l'app du site peut entrer en section critique
+// msg la requete à traiter
 func (df *DistributedFile) SCStopFromNetwork(msg Message) bool {
 	df.EstampClock.Update(msg.ClockValue)
 	df.Tab[msg.IndexSender] = TabEntry{
@@ -117,6 +127,9 @@ func (df *DistributedFile) SCStopFromNetwork(msg Message) bool {
 	return isScReadyForApp
 }
 
+// Traite un accusé de reception ne venant pas de l'app du site.
+// Renvoie un boolen indiquant si l'app du site peut entrer en section critique.
+// msg la requete à traiter
 func (df *DistributedFile) AckFromNetwork(msg Message) bool {
 	df.EstampClock.Update(msg.ClockValue)
 

@@ -145,3 +145,77 @@ func TestSCRequestFromNetwork(t *testing.T) {
 		t.Errorf("Expected SC access to be false, got true")
 	}
 }
+
+func TestSCStopFromNetwork(t *testing.T) {
+	n := 5
+	siteIndex := 0
+
+	df := GetNewDistributedFile(n, siteIndex)
+	for i := range n {
+		df.Tab[i].Date = 10
+	}
+
+	msg := Message{
+		Type:        SC_LIBERATION,
+		IndexSender: 1,
+		ClockValue:  4,
+	}
+
+	// Pas de requette donc pas de section critique
+	sc := df.SCStopFromNetwork(msg)
+	if sc {
+		t.Errorf("Expected SC access to be false, got true")
+	}
+
+	df.Tab[siteIndex] = TabEntry{
+		Type: SC_REQUEST,
+		Date: 3,
+	}
+	df.Tab[msg.IndexSender] = TabEntry{
+		Type: SC_LIBERATION,
+		Date: 10,
+	}
+
+	// Requette de sc en attente donc debut de sc
+	sc = df.SCStopFromNetwork(msg)
+	if !sc {
+		t.Errorf("Expected SC access to be true, got false")
+	}
+}
+
+func TestAckFromNetwork(t *testing.T) {
+	n := 5
+	siteIndex := 0
+
+	df := GetNewDistributedFile(n, siteIndex)
+	for i := range n {
+		df.Tab[i].Date = 10
+	}
+
+	msg := Message{
+		Type:        ACK,
+		IndexSender: 1,
+		ClockValue:  4,
+	}
+
+	// Pas de requette donc pas de section critique
+	sc := df.AckFromNetwork(msg)
+	if sc {
+		t.Errorf("Expected SC access to be false, got true")
+	}
+
+	df.Tab[siteIndex] = TabEntry{
+		Type: SC_REQUEST,
+		Date: 3,
+	}
+	df.Tab[msg.IndexSender] = TabEntry{
+		Type: SC_LIBERATION,
+		Date: 10,
+	}
+
+	// Requette de sc en attente donc debut de sc
+	sc = df.AckFromNetwork(msg)
+	if !sc {
+		t.Errorf("Expected SC access to be true, got false")
+	}
+}
