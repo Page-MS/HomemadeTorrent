@@ -2,8 +2,8 @@ package control
 
 // Request est une structure simplifiée (permet au controleur de comparer des requetes sans avoir a manipuler le message complet)
 type Request struct {
-	Stamp  int // estampille de Lamport extraite du message
-	SiteID string
+	Stamp     int // estampille de Lamport extraite du message
+	SiteIndex int
 }
 
 // EstPrioritaire pour avoir l'ordre total
@@ -15,5 +15,5 @@ func EstPrioritaire(reqA, reqB Request) bool {
 	if reqA.Stamp > reqB.Stamp {
 		return false
 	}
-	return reqA.SiteID < reqB.SiteID
+	return reqA.SiteIndex < reqB.SiteIndex
 }
