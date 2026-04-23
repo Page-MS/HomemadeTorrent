@@ -2,6 +2,7 @@ package control
 
 import (
 	"HomemadeTorrent/pkg/clock"
+	"fmt"
 )
 
 // ------------- Types et Structures file -----------------------
@@ -159,4 +160,17 @@ func compareTab(tab []TabEntry, siteIndex int) bool {
 		}
 	}
 	return true
+}
+
+func ParseFileMessageType(s string) (MessageType, error) {
+	switch s {
+	case string(SC_REQUEST):
+		return SC_REQUEST, nil
+	case string(SC_LIBERATION):
+		return SC_LIBERATION, nil
+	case string(ACK):
+		return ACK, nil
+	default:
+		return "", fmt.Errorf("[FILE REPARTIE] unknown MessageType: %s", s)
+	}
 }

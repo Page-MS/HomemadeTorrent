@@ -2,8 +2,6 @@ package control
 
 import (
 	"log"
-	"strconv"
-	"strings"
 
 	"HomemadeTorrent/pkg/clock"
 	"HomemadeTorrent/pkg/parser"
@@ -35,7 +33,7 @@ func NewController(nbSites int, siteIndex int, siteID string) *Controller {
 func (c *Controller) HandleIncoming(raw string) (response string, toBroadcast bool) {
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
-		log.Printf("[CONTROLLER] Erreur décodage message: %v", err)
+		log.Printf("[CONTROLLER] Erreur décodage message: %v\n", err)
 		return "", false
 	}
 
@@ -45,36 +43,48 @@ func (c *Controller) HandleIncoming(raw string) (response string, toBroadcast bo
 		c.Vector.Update(pMsg.Vector)
 	}
 
-	log.Printf("[CONTROLLER] Action: %s | de: %s | Lamport: %d", pMsg.Action, pMsg.Id, c.Lamport.GetValue())
+	log.Printf("[CONTROLLER] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Id, c.Lamport.GetValue())
 
 	// routage
+	var returnMsg parser.Message
+	isBroadcast := false
 	switch pMsg.Action {
 
 	// exclusion mutuelle
 	case string(SC_REQUEST), string(SC_LIBERATION), string(ACK):
-		return c.processDistributedFile(pMsg)
+		returnMsg, isBroadcast = c.processDistributedFile(pMsg)
 
 	// snapshot
+	// TODO: Remplacer par les constantes des actions de sauvegarde
 	case "MARKER":
-		return c.handleSnapshot(pMsg)
+		returnMsg, isBroadcast = c.handleSnapshot(pMsg)
 
 	// logique du torrent
+	// TODO: remplacer par les constantes des actions Torrent et logique de gestion
 	case "GET_PART", "SEND_PART":
-		return c.handleTorrent(pMsg)
+		c.handleTorrent(pMsg)
 
 	default:
-		log.Printf("[CONTROLLER] Action inconnue, ignorée: %s", pMsg.Action)
+		log.Printf("[CONTROLLER] Action inconnue, ignorée: %s\n", pMsg.Action)
 		return "", false
 	}
+
+	pString, err := parser.Encode(returnMsg)
+	if err != nil {
+		log.Printf("[CONTROLLER] Erreur encodage reponse: %v\n", err)
+		return "", false
+	}
+
+	return pString, isBroadcast
 }
 
 // processDistributedFile fait le lien avec distributed_file.go
-func (c *Controller) processDistributedFile(pMsg parser.Message) (string, bool) {
+func (c *Controller) processDistributedFile(pMsg parser.Message) (parser.Message, bool) {
 	// conversion du message Parser vers message de control interne
-	msgCtrl := Message{
-		Type:        MessageType(pMsg.Action),
-		IndexSender: c.getSiteIndexFromID(pMsg.Id),
-		ClockValue:  pMsg.Stamp,
+	msgCtrl, err := c.ParserMessageToFileMessage(pMsg)
+	if err != nil {
+		log.Printf("[CONTROLLER] Conversion message parser vers message file impossible: %v\n", err)
+		return parser.Message{}, false
 	}
 
 	var responseMsg Message
@@ -90,65 +100,29 @@ func (c *Controller) processDistributedFile(pMsg parser.Message) (string, bool) 
 	}
 
 	if isReady {
-		log.Println("[CONTROLLER] >>> SECTION CRITIQUE ACCORDÉE")
-
-		// TODO : faire les actions adaptés en fonctions du type de message sur le registre
-
-		// Modif finie donc on sort de SC
-		liberationMsg := c.DistFile.SCStopFromBaseApp()
-		return c.formatResponseFromAlgo(liberationMsg), true
+		log.Printf("[CONTROLLER] >>> SECTION CRITIQUE ACCORDÉE SITE %s\n", c.SiteID)
+		// TODO: informer l'app torrent
 	}
 
-	if responseMsg.Type != "" {
-		return c.formatResponseFromAlgo(responseMsg), (responseMsg.IndexDest == -1)
+	returnMsg, err := c.FileMessageToParserMessage(responseMsg)
+	if err != nil {
+		log.Printf("[CONTROLLER] Conversion message file vers message parser impossible: %v\n", err)
+		return parser.Message{}, false
 	}
-
-	return "", false
+	return returnMsg, (responseMsg.IndexDest == -1)
 }
 
 // TODO : handleSnapshot qui appelera le package de snapshot
-func (c *Controller) handleSnapshot(pMsg parser.Message) (string, bool) {
+func (c *Controller) handleSnapshot(pMsg parser.Message) (parser.Message, bool) {
 	log.Printf("[SNAPSHOT] Déclenchement via marker de %s", pMsg.Id)
 
-	return "", false
+	return parser.Message{}, false
 }
 
 // handleTorrent pour les messages de fichiers
-func (c *Controller) handleTorrent(pMsg parser.Message) (string, bool) {
+func (c *Controller) handleTorrent(pMsg parser.Message) {
 	log.Printf("[TORRENT] Traitement de la pièce %d pour l'objet %s", pMsg.Chunk, pMsg.Object)
-	return "", false
-}
-
-// buildRawString prépare une réponse compatible avec le parser
-// TODO : a virer quand le parser sera fini
-func (c *Controller) buildRawString(action string, stamp int) string {
-	var sb strings.Builder
-	sb.WriteString("ACTION:" + action + "\n")
-	sb.WriteString("ID:" + c.SiteID + "\n")
-	sb.WriteString("STAMP:" + strconv.Itoa(stamp) + "\n")
-	sb.WriteString("VECTOR:" + c.vectorToString(c.Vector.GetCopy()) + "\n")
-	return sb.String()
-}
-
-// formatResponseFromAlgo utilise la clock déjà calculée par lalgo de file répartie
-func (c *Controller) formatResponseFromAlgo(m Message) string {
-	return c.buildRawString(string(m.Type), m.ClockValue) // TODO a remplacer par la fonction encode() du parser
-}
-
-// formatNewRequest pour les messages initiés par le controlleur
-func (c *Controller) formatNewRequest(action string) string {
-	c.Lamport.Tick()
-	c.Vector.Tick()
-	return c.buildRawString(action, c.Lamport.GetValue()) // TODO a remplacer par la fonction encode() du parser
-}
-
-// vectorToString convertie vector en string
-func (c *Controller) vectorToString(v []int) string {
-	strs := make([]string, len(v))
-	for i, val := range v {
-		strs[i] = strconv.Itoa(val)
-	}
-	return strings.Join(strs, ",")
+	return
 }
 
 // getSiteIndexFromID fais la correspondance entre nom de site et index
