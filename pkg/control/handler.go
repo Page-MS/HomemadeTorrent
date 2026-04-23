@@ -21,10 +21,11 @@ type Controller struct {
 
 // NewController initialise un nouveau dispatcher central
 func NewController(nbSites int, siteIndex int, siteID string) *Controller {
+	clk := &clock.LamportClock{}
 	return &Controller{
-		Lamport:   &clock.LamportClock{},
+		Lamport:   clk,
 		Vector:    clock.NewVectorClock(nbSites, siteIndex),
-		DistFile:  GetNewDistributedFile(nbSites, siteIndex),
+		DistFile:  GetNewDistributedFile(nbSites, siteIndex, clk),
 		SiteID:    siteID,
 		SiteIndex: siteIndex,
 	}

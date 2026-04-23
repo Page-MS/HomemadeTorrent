@@ -19,7 +19,7 @@ type TabEntry struct {
 }
 
 type DistributedFile struct {
-	EstampClock clock.LamportClock
+	EstampClock *clock.LamportClock
 	Tab         []TabEntry
 	SiteIndex   int // Conversion Id site en index dans la logique du controleur
 }
@@ -35,9 +35,9 @@ type Message struct {
 
 // Renvoie une instance de file répartie
 // n le nombre de site du réseau, siteIndex l'index du site host de cette instance
-func GetNewDistributedFile(n int, siteIndex int) *DistributedFile {
+func GetNewDistributedFile(n int, siteIndex int, estampClock *clock.LamportClock) *DistributedFile {
 	df := &DistributedFile{
-		EstampClock: clock.LamportClock{},
+		EstampClock: estampClock,
 		Tab:         make([]TabEntry, n),
 		SiteIndex:   siteIndex,
 	}
