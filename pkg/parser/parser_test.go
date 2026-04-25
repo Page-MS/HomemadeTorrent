@@ -20,12 +20,12 @@ func TestDecode(t *testing.T) {
 		t.Errorf("ID value should be 'bijour_id', found %s", msg.Id)
 		return;
 	}
-	if msg.Dest != 123 {
-		t.Errorf("DEST value should be '123', found %d", msg.Dest)
+	if msg.Dest != "123" {
+		t.Errorf("DEST value should be '123', found %s", msg.Dest)
 		return;
 	}
-	if msg.Sender != 1 {
-		t.Errorf("SENDER value should be '1', found %d", msg.Sender)
+	if msg.Sender != "1" {
+		t.Errorf("SENDER value should be '1', found %s", msg.Sender)
 		return;
 	}
 	if msg.Stamp != 123 {
@@ -74,6 +74,8 @@ func TestEncode(t *testing.T) {
 		Action: "bijour",
 		Id: "je-suis-un-uuid",
 		Chunk: -1,
+		Dest: "0",
+		Sender: "0",
 	})
 	if err != nil {
 		t.Errorf("Should not have errored: %s", err)
@@ -89,6 +91,8 @@ func TestEncode(t *testing.T) {
 		Action: "",
 		Id: "je-suis-un-uuid",
 		Chunk: -1,
+		Dest: "0",
+		Sender: "0",
 	})
 	if err == nil { // missing action
 		t.Errorf("Should have errored but not")
@@ -99,6 +103,8 @@ func TestEncode(t *testing.T) {
 	str, err = Encode(Message{
 		Action: "action",
 		Chunk: -1,
+		Dest: "0",
+		Sender: "0",
 	})
 	if err != nil { // missing action
 		t.Errorf("Should not have errored, but found %s", err)
@@ -109,8 +115,8 @@ func TestEncode(t *testing.T) {
 	str, err = Encode(Message{
 		Action: "test",
 		Id: "superId",
-		Dest: 0,
-		Sender: 13,
+		Dest: "0",
+		Sender: "13",
 		Vect: []int{111, 333},
 		Stamp: 111,
 	})

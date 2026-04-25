@@ -14,8 +14,8 @@ type Message = struct {
 	Id          string
 	Stamp       int
 	Vect        []int
-	Dest        int
-	Sender      int
+	Dest        string
+	Sender      string
 	Object      string
 	Chunk       int
 	payload_len int
@@ -71,19 +71,11 @@ func Decode(raw_data string) (Message, error) {
 		}
 
 		case "DEST": {
-			val, err := strconv.Atoi(value)
-			if err != nil {
-				return Message{}, errors.New("Impossible to convert DEST id")
-			}
-			msg.Dest = val
+			msg.Dest = value
 		}
 
 		case "SENDER": {
-			val, err := strconv.Atoi(value)
-			if err != nil {
-				return Message{}, errors.New("Impossible to convert SENDER id")
-			}
-			msg.Sender = val
+			msg.Sender = value
 		}
 
 		case "CHUNK": {
@@ -149,8 +141,14 @@ func Encode(msg Message) (string, error) {
 	}
 	data = append(data, "ID:" + msg.Id)
 
-	data = append(data, "DEST:" + strconv.Itoa(msg.Dest))
-	data = append(data, "SENDER:" + strconv.Itoa(msg.Sender))
+	if msg.Dest == "" {
+		return "", errors.New("Empty DEST")
+	}
+	if msg.Sender == "" {
+		return "", errors.New("Empty SENDER")
+	}
+	data = append(data, "DEST:" + msg.Dest)
+	data = append(data, "SENDER:" + msg.Sender)
 	data = append(data, "STAMP:" + strconv.Itoa(msg.Stamp))
 
 	str := make([]string, 0, 2)
