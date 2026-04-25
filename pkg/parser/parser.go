@@ -1,26 +1,35 @@
 package parser
 
 import (
-    "github.com/google/uuid"
 	"errors"
 	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 
 type Message = struct {
-	Action string
-	Id string
-	Object string
-	Chunk int
+	Action      string
+	Id          string
+	Stamp       int
+	Vect        []int
+	Dest        int
+	Sender      int
+	Object      string
+	Chunk       int
 	payload_len int
-	Payload string
+	Payload     string
 }
 
 // ACTION:qlksdjfqmlsdfjmqsdlkf
 // ID:slkdjfmqldskjf
 // OBJECT:sldkfjsdlkf
 // CHUNK:1
+// SENDER:3
+// DEST:1
+// STAMP:123
+// VECT:123,231,344
 // PAYLOAD_LEN:123
 // <payload_qlksdjfmlqksdjflkqsd>
 
@@ -28,6 +37,7 @@ type Message = struct {
 // if no PAYLOAD_LEN, then no payload
 // if len(payload) == 0, then no payload & payload_len is send
 // chunk is zero indexed, -1 indicates no chunk
+// dest is one indexed, 0/-1 indicates broadcast
 
 
 // string -> Message, \n is the sep
@@ -59,13 +69,50 @@ func Decode(raw_data string) (Message, error) {
 		case "OBJECT": {
 			msg.Object = value
 		}
+
+		case "DEST": {
+			val, err := strconv.Atoi(value)
+			if err != nil {
+				return Message{}, errors.New("Impossible to convert DEST id")
+			}
+			msg.Dest = val
+		}
+
+		case "SENDER": {
+			val, err := strconv.Atoi(value)
+			if err != nil {
+				return Message{}, errors.New("Impossible to convert SENDER id")
+			}
+			msg.Sender = val
+		}
+
 		case "CHUNK": {
 			val, err := strconv.Atoi(value)
 			if err != nil {
-				return Message{}, errors.New("Impossible to chunk nb")
+				return Message{}, errors.New("Impossible to convert CHUNK nb")
 			}
 			msg.Chunk = val
 		}
+
+		case "STAMP": {
+			val, err := strconv.Atoi(value)
+			if err != nil {
+				return Message{}, errors.New("Impossible to convert STAMP value")
+			}
+			msg.Stamp = val
+		}
+		
+		case "VECT": {
+			msg.Vect = make([]int, 0)
+			for _, val := range strings.Split(value, ",") {
+				nb, err := strconv.Atoi(val)
+				if err != nil {
+					return Message{}, errors.New("Impossible to convert VECT value")
+				}
+				msg.Vect = append(msg.Vect, nb)
+			}
+		}
+
 		case "PAYLOAD_LEN": {
 			val, err := strconv.Atoi(value)
 			if err != nil {
@@ -79,7 +126,8 @@ func Decode(raw_data string) (Message, error) {
 
 			return msg, nil // return now
 		}
-		default:{
+
+		default: {
 			return Message{}, errors.New("Found unknonw field: " + key)
 		}
 		}
@@ -100,6 +148,16 @@ func Encode(msg Message) (string, error) {
 		msg.Id = uuid.New().String()
 	}
 	data = append(data, "ID:" + msg.Id)
+
+	data = append(data, "DEST:" + strconv.Itoa(msg.Dest))
+	data = append(data, "SENDER:" + strconv.Itoa(msg.Sender))
+	data = append(data, "STAMP:" + strconv.Itoa(msg.Stamp))
+
+	str := make([]string, 0, 2)
+	for _, v := range msg.Vect {
+		str = append(str, strconv.Itoa(v))
+	}
+	data = append(data, "VECT:" + strings.Join(str, ","))
 
 	if msg.Object != ""{
 		data = append(data, "OBJECT:" + msg.Object)

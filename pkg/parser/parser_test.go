@@ -1,12 +1,13 @@
 package parser
 
 import (
+	"slices"
 	"testing"
 )
 
-func TestEncode(t *testing.T) {
+func TestDecode(t *testing.T) {
 	// minimal case
-	msg, err := Decode("ACTION:bijour\nID:bijour_id\n")
+	msg, err := Decode("ACTION:bijour\nID:bijour_id\nDEST:123\nSENDER:1\nSTAMP:123\nVECT:123,111,333")
 	if err != nil {
 		t.Errorf("Should not have errored: %s", err)
 		return;
@@ -17,6 +18,22 @@ func TestEncode(t *testing.T) {
 	}
 	if msg.Id != "bijour_id" {
 		t.Errorf("ID value should be 'bijour_id', found %s", msg.Id)
+		return;
+	}
+	if msg.Dest != 123 {
+		t.Errorf("DEST value should be '123', found %d", msg.Dest)
+		return;
+	}
+	if msg.Sender != 1 {
+		t.Errorf("SENDER value should be '1', found %d", msg.Sender)
+		return;
+	}
+	if msg.Stamp != 123 {
+		t.Errorf("STAMP value should be '123', found %d", msg.Stamp)
+		return;
+	}
+	if slices.Compare(msg.Vect, []int{123, 111, 333}) != 0 {
+		t.Errorf("STAMP value should be [123 111 333], found %d", msg.Vect)
 		return;
 	}
 
@@ -51,7 +68,7 @@ func TestEncode(t *testing.T) {
 	}
 }
 
-func TestDecode(t *testing.T) {
+func TestEncode(t *testing.T) {
 	// no action/chunk/payload
 	str, err := Encode(Message{
 		Action: "bijour",
@@ -62,7 +79,7 @@ func TestDecode(t *testing.T) {
 		t.Errorf("Should not have errored: %s", err)
 		return;
 	}
-	res := "ACTION:bijour\nID:je-suis-un-uuid"
+	res := "ACTION:bijour\nID:je-suis-un-uuid\nDEST:0\nSENDER:0\nSTAMP:0\nVECT:"
 	if str != res {
 		t.Errorf("Encode operation should have produced '%s', but found %s", res, str)
 	}
@@ -86,5 +103,23 @@ func TestDecode(t *testing.T) {
 	if err != nil { // missing action
 		t.Errorf("Should not have errored, but found %s", err)
 		return;
+	}
+
+	// encode stamp & vecto
+	str, err = Encode(Message{
+		Action: "test",
+		Id: "superId",
+		Dest: 0,
+		Sender: 13,
+		Vect: []int{111, 333},
+		Stamp: 111,
+	})
+	if err != nil { // missing action
+		t.Errorf("Should not have errored, but found %s", err)
+		return;
+	}
+	res = "ACTION:test\nID:superId\nDEST:0\nSENDER:13\nSTAMP:111\nVECT:111,333\nCHUNK:0"
+	if str != res {
+		t.Errorf("Encode operation should have produced '%s'\n, but found %s", res, str)
 	}
 }
