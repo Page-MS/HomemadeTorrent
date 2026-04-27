@@ -8,7 +8,7 @@ import (
 func (c *Controller) ParserMessageToFileMessage(pMsg parser.Message) (Message, error) {
 	fileMsgType, err := ParseFileMessageType(pMsg.Action)
 	if err != nil {
-		return Message{}, fmt.Errorf("[MAPPER] Type de message inconnue pour la file répartie: %v\n", err)
+		return Message{}, fmt.Errorf("[MAPPER] Type de message inconnu pour la file répartie: %v\n", err)
 	}
 
 	return Message{
@@ -22,6 +22,8 @@ func (c *Controller) FileMessageToParserMessage(fMsg Message) (parser.Message, e
 	return parser.Message{
 		Action: string(fMsg.Type),
 		Stamp:  fMsg.ClockValue,
+		Dest:   c.getIdFromSIteIndex(fMsg.IndexDest),
+		Sender: c.getIdFromSIteIndex(fMsg.IndexSender),
 		// A completer quand le msg type sera plus clair
 	}, nil
 }

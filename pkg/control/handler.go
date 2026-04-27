@@ -39,11 +39,13 @@ func (c *Controller) HandleIncoming(raw string) (response string, toBroadcast bo
 
 	// synchro des horloges
 	c.Lamport.Update(pMsg.Stamp)
-	if len(pMsg.Vector) > 0 {
-		c.Vector.Update(pMsg.Vector)
+	if len(pMsg.Vect) > 0 {
+		c.Vector.Update(pMsg.Vect)
 	}
 
-	log.Printf("[CONTROLLER] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Id, c.Lamport.GetValue())
+	// TODO: Ajout verification que le message est pour nous sinon on le renvoie au suivant
+
+	log.Printf("[CONTROLLER] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
 
 	// routage
 	var returnMsg parser.Message
@@ -129,4 +131,10 @@ func (c *Controller) handleTorrent(pMsg parser.Message) {
 func (c *Controller) getSiteIndexFromID(id string) int {
 	// TODO: Implémenter une vraie table de correspondance
 	return 0
+}
+
+// getIdFromSIteIndex fais la correspondance entre nom de site et index
+func (c *Controller) getIdFromSIteIndex(index int) string {
+	// TODO: Implémenter une vraie table de correspondance
+	return "0"
 }
