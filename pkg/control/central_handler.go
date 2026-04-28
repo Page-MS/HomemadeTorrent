@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"HomemadeTorrent/pkg/clock"
+	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
 )
@@ -17,7 +18,7 @@ type SiteDirectory struct {
 type Controller struct {
 	Lamport          *clock.LamportClock
 	Vector           *clock.VectorClock
-	DistFile         *DistributedFile
+	DistFile         *distributed_file.DistributedFile
 	Reg              *registre.Registre
 	SiteID           string          // nom du site
 	SiteIndex        int             // index du site
@@ -35,7 +36,7 @@ func NewController(siteID string, allSiteIDs []string) *Controller {
 	return &Controller{
 		Lamport:          clk,
 		Vector:           clock.NewVectorClock(len(allSiteIDs), dir.IDToIndex[siteID]),
-		DistFile:         GetNewDistributedFile(len(allSiteIDs), dir.IDToIndex[siteID], clk),
+		DistFile:         distributed_file.GetNewDistributedFile(len(allSiteIDs), dir.IDToIndex[siteID], clk),
 		SiteID:           siteID,
 		SiteIndex:        dir.IDToIndex[siteID],
 		SeenMessages:     make(map[string]bool),
@@ -63,8 +64,8 @@ func NewSiteDirectory(siteIDs []string) SiteDirectory {
 	}
 }
 
-// HandleIncoming s'occupe de recevoir les message texte, synchronise les horloges et fait le routage.
-func (c *Controller) HandleIncoming(raw string) []string {
+// HandleIncomingFromNetwork s'occupe de recevoir les message texte, synchronise les horloges et fait le routage.
+func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	var responses []string
 
 	// -------------- Decodage ------------------
@@ -107,9 +108,9 @@ func (c *Controller) HandleIncoming(raw string) []string {
 	switch pMsg.Action {
 
 	// exclusion mutuelle
-	case string(SC_REQUEST), string(SC_LIBERATION), string(ACK):
+	case string(distributed_file.SC_REQUEST), string(distributed_file.SC_LIBERATION), string(distributed_file.ACK):
 		log.Printf("[CONTROLLER] Appel file répartie\n")
-		returnMsg = c.processDistributedFile(pMsg)
+		returnMsg = c.handleDistributedFile(pMsg)
 
 	// snapshot
 	// TODO: Remplacer par les constantes des actions de sauvegarde
@@ -138,50 +139,9 @@ func (c *Controller) HandleIncoming(raw string) []string {
 	return append(responses, pString)
 }
 
-// processDistributedFile fait le lien avec distributed_file.go
-func (c *Controller) processDistributedFile(pMsg parser.Message) parser.Message {
-	// conversion du message Parser vers message de control interne
-	msgCtrl, err := c.ParserMessageToFileMessage(pMsg)
-	if err != nil {
-		log.Printf("[CONTROLLER] Conversion message parser vers message file impossible: %v\n", err)
-		return parser.Message{}
-	}
-
-	var responseMsg Message
-	var isReady bool
-
-	switch msgCtrl.Type {
-	case SC_REQUEST:
-		responseMsg, isReady = c.DistFile.SCRequestFromNetwork(msgCtrl)
-	case SC_LIBERATION:
-		isReady = c.DistFile.SCStopFromNetwork(msgCtrl)
-	case ACK:
-		isReady = c.DistFile.AckFromNetwork(msgCtrl)
-	}
-
-	if isReady {
-		log.Printf("[CONTROLLER] >>> SECTION CRITIQUE ACCORDÉE SITE %s\n", c.SiteID)
-		// TODO: informer l'app torrent
-	}
-
-	returnMsg, err := c.FileMessageToParserMessage(responseMsg)
-	if err != nil {
-		log.Printf("[CONTROLLER] Conversion message file vers message parser impossible | Message: %s | Erreur: %v\n", returnMsg, err)
-		return parser.Message{}
-	}
-	return returnMsg
-}
-
-// TODO : handleSnapshot qui appelera le package de snapshot
-func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
-	log.Printf("[SNAPSHOT] Déclenchement via marker de %s", pMsg.Id)
-
-	return parser.Message{}
-}
-
-// handleTorrent pour les messages de fichiers
-func (c *Controller) handleTorrent(pMsg parser.Message) {
-	log.Printf("[TORRENT] Traitement de la pièce %d pour l'objet %s", pMsg.Chunk, pMsg.Object)
+// TODO: HandleIncomingFromLocal gère les demande venant de l'app Torrent
+func (c *Controller) HandleIncomingFromLocal(msg parser.Message) string {
+	return ""
 }
 
 // getSiteIndexFromID fais la correspondance entre nom de site et index

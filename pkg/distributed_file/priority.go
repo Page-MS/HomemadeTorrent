@@ -1,4 +1,4 @@
-package control
+package distributed_file
 
 // Request est une structure simplifiée (permet au controleur de comparer des requetes sans avoir a manipuler le message complet)
 type Request struct {

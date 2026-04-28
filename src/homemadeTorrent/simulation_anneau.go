@@ -60,7 +60,7 @@ VECT:1,0,0`,
 
 		fmt.Printf("\n--- Site %s traite ---\n", currentSite.SiteID)
 
-		responses := currentSite.HandleIncoming(item.msg)
+		responses := currentSite.HandleIncomingFromNetwork(item.msg)
 		fmt.Printf("Site %s a généré %d message(s)\n", currentSite.SiteID, len(responses))
 
 		for _, resp := range responses {

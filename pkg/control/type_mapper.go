@@ -1,24 +1,25 @@
 package control
 
 import (
+	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
 	"fmt"
 )
 
-func (c *Controller) ParserMessageToFileMessage(pMsg parser.Message) (Message, error) {
-	fileMsgType, err := ParseFileMessageType(pMsg.Action)
+func (c *Controller) ParserMessageToFileMessage(pMsg parser.Message) (distributed_file.Message, error) {
+	fileMsgType, err := distributed_file.ParseFileMessageType(pMsg.Action)
 	if err != nil {
-		return Message{}, fmt.Errorf("[MAPPER] Type de message inconnu pour la file répartie: %v\n", err)
+		return distributed_file.Message{}, fmt.Errorf("[MAPPER] Type de message inconnu pour la file répartie: %v\n", err)
 	}
 
-	return Message{
+	return distributed_file.Message{
 		Type:        fileMsgType,
 		IndexSender: c.getSiteIndexFromID(pMsg.Id),
 		ClockValue:  pMsg.Stamp,
 	}, nil
 }
 
-func (c *Controller) FileMessageToParserMessage(fMsg Message) (parser.Message, error) {
+func (c *Controller) FileMessageToParserMessage(fMsg distributed_file.Message) (parser.Message, error) {
 	return parser.Message{
 		Action: string(fMsg.Type),
 		Stamp:  fMsg.ClockValue,

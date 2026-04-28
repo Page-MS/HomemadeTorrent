@@ -1,4 +1,4 @@
-package control
+package distributed_file
 
 import "testing"
 
