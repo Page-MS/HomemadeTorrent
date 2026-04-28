@@ -2,35 +2,64 @@ package control
 
 import (
 	"log"
+	"sort"
 
 	"HomemadeTorrent/pkg/clock"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
 )
 
+type SiteDirectory struct {
+	IDToIndex map[string]int
+	IndexToID []string
+}
+
 type Controller struct {
-	Lamport      *clock.LamportClock
-	Vector       *clock.VectorClock
-	DistFile     *DistributedFile
-	Reg          *registre.Registre
-	SiteID       string // nom du site
-	SiteIndex    int    // index du site
-	SeenMessages map[string]bool
+	Lamport          *clock.LamportClock
+	Vector           *clock.VectorClock
+	DistFile         *DistributedFile
+	Reg              *registre.Registre
+	SiteID           string          // nom du site
+	SiteIndex        int             // index du site
+	SeenMessages     map[string]bool // Messages déjà vu par le site
+	NetworkDirectory SiteDirectory   // Correspondance SiteId et index
 }
 
 // Adapter cette valeur en focntion de la convention choisie
 const BROADCAST string = "-1"
 
 // NewController initialise un nouveau dispatcher central
-func NewController(nbSites int, siteIndex int, siteID string) *Controller {
+func NewController(siteID string, allSiteIDs []string) *Controller {
 	clk := &clock.LamportClock{}
+	dir := NewSiteDirectory(allSiteIDs)
 	return &Controller{
-		Lamport:      clk,
-		Vector:       clock.NewVectorClock(nbSites, siteIndex),
-		DistFile:     GetNewDistributedFile(nbSites, siteIndex, clk),
-		SiteID:       siteID,
-		SiteIndex:    siteIndex,
-		SeenMessages: make(map[string]bool),
+		Lamport:          clk,
+		Vector:           clock.NewVectorClock(len(allSiteIDs), dir.IDToIndex[siteID]),
+		DistFile:         GetNewDistributedFile(len(allSiteIDs), dir.IDToIndex[siteID], clk),
+		SiteID:           siteID,
+		SiteIndex:        dir.IDToIndex[siteID],
+		SeenMessages:     make(map[string]bool),
+		NetworkDirectory: dir,
+	}
+}
+
+// Initialise l'index de correspondace entre les SiteID et leurs Index
+func NewSiteDirectory(siteIDs []string) SiteDirectory {
+	// copie pour éviter effets de bord
+	ids := make([]string, len(siteIDs))
+	copy(ids, siteIDs)
+
+	// tri déterministe
+	sort.Strings(ids)
+
+	idToIndex := make(map[string]int)
+	for i, id := range ids {
+		idToIndex[id] = i
+	}
+
+	return SiteDirectory{
+		IDToIndex: idToIndex,
+		IndexToID: ids,
 	}
 }
 
@@ -56,10 +85,11 @@ func (c *Controller) HandleIncoming(raw string) []string {
 	c.SeenMessages[pMsg.Id] = true
 	// verifier si le message est pour ce site
 	processLocal, forward := c.routeMessage(pMsg)
+	if forward {
+		responses = append(responses, raw)
+	}
 	if !processLocal {
-		if forward {
-			return append(responses, raw)
-		}
+
 		return responses
 	}
 
@@ -78,16 +108,19 @@ func (c *Controller) HandleIncoming(raw string) []string {
 
 	// exclusion mutuelle
 	case string(SC_REQUEST), string(SC_LIBERATION), string(ACK):
+		log.Printf("[CONTROLLER] Appel file répartie\n")
 		returnMsg = c.processDistributedFile(pMsg)
 
 	// snapshot
 	// TODO: Remplacer par les constantes des actions de sauvegarde
 	case "MARKER":
+		log.Printf("[CONTROLLER] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
 
 	// logique du torrent
 	// TODO: remplacer par les constantes des actions Torrent et logique de gestion
 	case "GET_PART", "SEND_PART":
+		log.Printf("[CONTROLLER] Appel logique torrent\n")
 		c.handleTorrent(pMsg)
 
 	default:
@@ -98,7 +131,7 @@ func (c *Controller) HandleIncoming(raw string) []string {
 	// ---------- Encodage reponse ----------------
 	pString, err := parser.Encode(returnMsg)
 	if err != nil {
-		log.Printf("[CONTROLLER] Erreur encodage reponse: %v\n", err)
+		log.Printf("[CONTROLLER] Pas d'actions -> Pas de message à envoyer")
 		return responses
 	}
 
@@ -133,7 +166,7 @@ func (c *Controller) processDistributedFile(pMsg parser.Message) parser.Message 
 
 	returnMsg, err := c.FileMessageToParserMessage(responseMsg)
 	if err != nil {
-		log.Printf("[CONTROLLER] Conversion message file vers message parser impossible: %v\n", err)
+		log.Printf("[CONTROLLER] Conversion message file vers message parser impossible | Message: %s | Erreur: %v\n", returnMsg, err)
 		return parser.Message{}
 	}
 	return returnMsg
@@ -153,17 +186,21 @@ func (c *Controller) handleTorrent(pMsg parser.Message) {
 
 // getSiteIndexFromID fais la correspondance entre nom de site et index
 func (c *Controller) getSiteIndexFromID(id string) int {
-	// TODO: Implémenter une vraie table de correspondance
-	return 0
+	return c.NetworkDirectory.IDToIndex[id]
 }
 
 // getIdFromSIteIndex fais la correspondance entre nom de site et index
 func (c *Controller) getIdFromSIteIndex(index int) string {
-	// TODO: Implémenter une vraie table de correspondance
-	return "0"
+	return c.NetworkDirectory.IndexToID[index]
 }
 
 func (c *Controller) routeMessage(pMsg parser.Message) (processLocal bool, forward bool) {
+	// Cas Message pour soi meme
+	if pMsg.Sender == c.SiteID {
+		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré\n")
+		return false, false
+	}
+
 	// Cas broadcast
 	if pMsg.Dest == BROADCAST {
 		log.Printf("[ROUTAGE] Broadcast reçu sur site %s", c.SiteID)
