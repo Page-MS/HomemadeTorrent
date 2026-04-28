@@ -22,8 +22,8 @@ func (c *Controller) FileMessageToParserMessage(fMsg Message) (parser.Message, e
 	return parser.Message{
 		Action: string(fMsg.Type),
 		Stamp:  fMsg.ClockValue,
+		Vect:   c.Vector.GetCopy(),
 		Dest:   c.getIdFromSIteIndex(fMsg.IndexDest),
 		Sender: c.getIdFromSIteIndex(fMsg.IndexSender),
-		// A completer quand le msg type sera plus clair
 	}, nil
 }
