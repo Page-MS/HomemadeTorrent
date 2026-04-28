@@ -140,8 +140,8 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 }
 
 // TODO: HandleIncomingFromLocal gère les demande venant de l'app Torrent
-func (c *Controller) HandleIncomingFromLocal(msg parser.Message) string {
-	return ""
+func (c *Controller) HandleIncomingFromLocal(msg string) []string {
+	return nil
 }
 
 // getSiteIndexFromID fais la correspondance entre nom de site et index
