@@ -17,6 +17,9 @@ type Controller struct {
 	SiteIndex int    // index du site
 }
 
+// Adapter cette valeur en focntion de la convention choisie
+const BROADCAST string = "-1"
+
 // NewController initialise un nouveau dispatcher central
 func NewController(nbSites int, siteIndex int, siteID string) *Controller {
 	clk := &clock.LamportClock{}
@@ -37,17 +40,26 @@ func (c *Controller) HandleIncoming(raw string) (response string, toBroadcast bo
 		return "", false
 	}
 
+	log.Printf("[CONTROLLER] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
+
 	// synchro des horloges
 	c.Lamport.Update(pMsg.Stamp)
 	if len(pMsg.Vect) > 0 {
 		c.Vector.Update(pMsg.Vect)
 	}
 
-	// TODO: Ajout verification que le message est pour nous sinon on le renvoie au suivant
+	// Verification que le message est pour nous sinon on le renvoie au suivant
+	if pMsg.Dest != BROADCAST && pMsg.Dest != c.SiteID {
+		log.Printf("[CONTROLLER] Message pas pour ce site => renvoie au suivant\n")
+		return raw, (pMsg.Dest == BROADCAST)
+	}
+
+	// TODO: cas du broadcast -> renvoie a la fois le message recut et la réponse du site
+	// Besoin de modifier le parser pour créer différents messages à l'encodage en focntion des \n
 
 	log.Printf("[CONTROLLER] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
 
-	// routage
+	// Redirection vers le service aproprié
 	var returnMsg parser.Message
 	isBroadcast := false
 	switch pMsg.Action {
@@ -124,7 +136,6 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) (parser.Message, bool) 
 // handleTorrent pour les messages de fichiers
 func (c *Controller) handleTorrent(pMsg parser.Message) {
 	log.Printf("[TORRENT] Traitement de la pièce %d pour l'objet %s", pMsg.Chunk, pMsg.Object)
-	return
 }
 
 // getSiteIndexFromID fais la correspondance entre nom de site et index
