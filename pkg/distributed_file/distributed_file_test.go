@@ -223,3 +223,50 @@ func TestAckFromNetwork(t *testing.T) {
 		t.Errorf("Expected SC access to be true, got false")
 	}
 }
+
+func TestSCEntry(t *testing.T) {
+	nbSites := 3
+
+	// Horloges
+	clocks := make([]*clock.LamportClock, nbSites)
+	for i := 0; i < nbSites; i++ {
+		clocks[i] = &clock.LamportClock{}
+	}
+
+	// Files réparties
+	files := make([]*DistributedFile, nbSites)
+	for i := 0; i < nbSites; i++ {
+		files[i] = GetNewDistributedFile(nbSites, i, clocks[i])
+	}
+
+	t.Log("=== TEST ENTREE SC ===")
+
+	// 🟢 1. Site 0 fait une requête
+	req0 := files[0].SCRequestFromBaseApp()
+	t.Log("Site 0 fait SC_REQUEST")
+
+	// 🟢 2. Les autres reçoivent la requête et répondent ACK
+	ack1, _ := files[1].SCRequestFromNetwork(req0)
+	ack2, _ := files[2].SCRequestFromNetwork(req0)
+	t.Log("Sites 1 et 2 envoient ACK")
+
+	// 🟢 3. Site 0 reçoit les ACK
+	ready := false
+
+	ready = files[0].AckFromNetwork(ack1)
+	t.Logf("Site 0 reçoit ACK de 1 → ready ? %v", ready)
+
+	if ready {
+		t.Fatalf("❌ Entrée en SC trop tôt (après 1 seul ACK)")
+	}
+
+	ready = files[0].AckFromNetwork(ack2)
+	t.Logf("Site 0 reçoit ACK de 2 → ready ? %v", ready)
+
+	// ASSERT FINAL
+	if !ready {
+		t.Fatalf("❌ ERREUR: le site 0 n'entre pas en section critique après tous les ACK")
+	}
+
+	t.Log("✅ SUCCES: site 0 entre en section critique")
+}
