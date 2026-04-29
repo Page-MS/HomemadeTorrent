@@ -1,7 +1,8 @@
-package control
+package distributed_file
 
 import (
 	"HomemadeTorrent/pkg/clock"
+	"fmt"
 )
 
 // ------------- Types et Structures file -----------------------
@@ -19,7 +20,7 @@ type TabEntry struct {
 }
 
 type DistributedFile struct {
-	EstampClock clock.LamportClock
+	EstampClock *clock.LamportClock
 	Tab         []TabEntry
 	SiteIndex   int // Conversion Id site en index dans la logique du controleur
 }
@@ -35,9 +36,9 @@ type Message struct {
 
 // Renvoie une instance de file répartie
 // n le nombre de site du réseau, siteIndex l'index du site host de cette instance
-func GetNewDistributedFile(n int, siteIndex int) *DistributedFile {
+func GetNewDistributedFile(n int, siteIndex int, estampClock *clock.LamportClock) *DistributedFile {
 	df := &DistributedFile{
-		EstampClock: clock.LamportClock{},
+		EstampClock: estampClock,
 		Tab:         make([]TabEntry, n),
 		SiteIndex:   siteIndex,
 	}
@@ -159,4 +160,17 @@ func compareTab(tab []TabEntry, siteIndex int) bool {
 		}
 	}
 	return true
+}
+
+func ParseFileMessageType(s string) (MessageType, error) {
+	switch s {
+	case string(SC_REQUEST):
+		return SC_REQUEST, nil
+	case string(SC_LIBERATION):
+		return SC_LIBERATION, nil
+	case string(ACK):
+		return ACK, nil
+	default:
+		return "", fmt.Errorf("[FILE REPARTIE] unknown MessageType: %s", s)
+	}
 }

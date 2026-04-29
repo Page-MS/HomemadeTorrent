@@ -1,12 +1,16 @@
-package control
+package distributed_file
 
-import "testing"
+import (
+	"HomemadeTorrent/pkg/clock"
+	"testing"
+)
 
 func TestGetNewDistributedFile(t *testing.T) {
 	n := 10
 	siteIndex := 5
+	clk := &clock.LamportClock{}
 
-	df := GetNewDistributedFile(n, siteIndex)
+	df := GetNewDistributedFile(n, siteIndex, clk)
 
 	// Vérifier que l'objet n'est pas nil
 	if df == nil {
@@ -40,7 +44,7 @@ func TestGetNewDistributedFile(t *testing.T) {
 }
 
 func TestSCRequestFromBaseApp(t *testing.T) {
-	df := GetNewDistributedFile(10, 5)
+	df := GetNewDistributedFile(10, 5, &clock.LamportClock{})
 	msg := df.SCRequestFromBaseApp()
 
 	// Verifier que c'est une requete de debut de section critique
@@ -60,7 +64,7 @@ func TestSCRequestFromBaseApp(t *testing.T) {
 }
 
 func TestSCStopFromBaseApp(t *testing.T) {
-	df := GetNewDistributedFile(10, 5)
+	df := GetNewDistributedFile(10, 5, &clock.LamportClock{})
 	msg := df.SCStopFromBaseApp()
 
 	// Verifier que c'est une requete de fin de section critique
@@ -83,7 +87,7 @@ func TestSCRequestFromNetwork(t *testing.T) {
 	n := 3
 	siteIndex := 0
 
-	df := GetNewDistributedFile(n, siteIndex)
+	df := GetNewDistributedFile(n, siteIndex, &clock.LamportClock{})
 	for i := range n {
 		df.Tab[i].Date = 10
 	}
@@ -150,7 +154,7 @@ func TestSCStopFromNetwork(t *testing.T) {
 	n := 5
 	siteIndex := 0
 
-	df := GetNewDistributedFile(n, siteIndex)
+	df := GetNewDistributedFile(n, siteIndex, &clock.LamportClock{})
 	for i := range n {
 		df.Tab[i].Date = 10
 	}
@@ -187,7 +191,7 @@ func TestAckFromNetwork(t *testing.T) {
 	n := 5
 	siteIndex := 0
 
-	df := GetNewDistributedFile(n, siteIndex)
+	df := GetNewDistributedFile(n, siteIndex, &clock.LamportClock{})
 	for i := range n {
 		df.Tab[i].Date = 10
 	}
