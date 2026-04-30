@@ -22,7 +22,7 @@ func main() {
 	registreTest := registre.NewRegistre()
 	registre.MakeInitialHardcodedRegister(registreTest)
 	registreTest.PrintRegister()
-	currentSiteID := "site1"
+	currentSiteID := "Page"
 	registre.InitialiseRegistre(currentSiteID, registreTest)
 	event_loop.Start(registreTest.GetPeerList(), currentSiteID)
 }

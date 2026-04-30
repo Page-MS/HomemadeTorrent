@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -164,6 +165,15 @@ func initialisationFileCopy(file file, siteID string) {
 		fmt.Printf("Error reading file: %v\n", err)
 		return
 	}
+	// We create the fullFiles folder for the site if it does not exist
+	if _, err := os.Stat("bin/" + siteID); os.IsNotExist(err) {
+		err = os.MkdirAll("bin/"+siteID, 0755)
+		if err != nil {
+			fmt.Printf("Error creating fullFiles folder: %v\n", err)
+			return
+		}
+	}
+
 	err = os.WriteFile("bin/"+siteID+"/"+"fullFiles"+siteID+"_"+file.name, filecontent, 0644)
 	if err != nil {
 		fmt.Printf("Error writing file: %v\n", err)
@@ -255,6 +265,28 @@ func MakeInitialHardcodedRegister(registre *Registre) {
 // Takes the siteID and intialize the files that the file should have at the beginning of the execution of the program based on the precreated common register
 func InitialiseRegistre(currentSiteID string, registre *Registre) {
 	fmt.Printf("Initialisation du registre pour le site %s\n", currentSiteID)
+	// If the site ID is not in the register, we return an error
+	if !slices.Contains(registre.peers, currentSiteID) {
+		fmt.Printf("Site ID %s not found in the register\n", currentSiteID)
+		return
+	}
+	// We get the files that the site should have at the beginning of the execution of the program based on the precreated common register
+	filesToHave := make([]file, 0)
+	for _, file := range registre.GetFileList() {
+		if slices.Contains(file.peersThatHaveFileID, currentSiteID) {
+			filesToHave = append(filesToHave, file)
+		}
+	}
+	if len(filesToHave) == 0 {
+		fmt.Printf("No files to initialize for site ID %s\n", currentSiteID)
+		return
+	}
+	// We copy the files that the site should have at the beginning of the execution of the program based on the precreated common register from the fullFiles folder to the site folder
+	for _, file := range filesToHave {
+		initialisationFileCopy(file, currentSiteID)
+		SplitFile("bin/"+currentSiteID+"/"+"fullFiles"+currentSiteID+"_"+file.name, "bin/"+currentSiteID+"/parts")
+	}
+
 }
 
 func CleanUpPartsDirectory() {
@@ -268,6 +300,27 @@ func CleanUpPartsDirectory() {
 		if err != nil {
 			fmt.Printf("Error removing file: %v\n", err)
 			return
+		}
+	}
+	// We delete the subfolder
+	err = os.Remove("bin/parts")
+	if err != nil {
+		fmt.Printf("Error removing directory: %v\n", err)
+		return
+	}
+	// We remove the subfolders for each site
+	files, err = os.ReadDir("bin")
+	if err != nil {
+		fmt.Printf("Error reading directory: %v\n", err)
+		return
+	}
+	for _, file := range files {
+		if file.IsDir() && file.Name() != "baseFiles" {
+			err := os.RemoveAll("bin/" + file.Name())
+			if err != nil {
+				fmt.Printf("Error removing directory: %v\n", err)
+				return
+			}
 		}
 	}
 }
