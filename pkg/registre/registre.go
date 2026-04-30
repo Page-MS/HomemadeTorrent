@@ -153,7 +153,6 @@ func (r *Registre) PutAllFilesFromDirectoryInRegister(source string, destination
 				fileParts:     fileParts,
 			}
 			r.AddFile(newFile)
-			initialisationFileCopy(newFile, "site1")
 		}
 	}
 }
@@ -165,7 +164,7 @@ func initialisationFileCopy(file file, siteID string) {
 		fmt.Printf("Error reading file: %v\n", err)
 		return
 	}
-	err = os.WriteFile("bin/"+siteID+"-"+file.name, filecontent, 0644)
+	err = os.WriteFile("bin/"+siteID+"/"+siteID+"_"+file.name, filecontent, 0644)
 	if err != nil {
 		fmt.Printf("Error writing file: %v\n", err)
 		return
@@ -232,11 +231,27 @@ func NewRegistre() *Registre {
 func MakeInitialHardcodedRegister(registre *Registre) {
 	peersList := []string{"Mathy", "Alexis", "Noah", "Page"}
 	registre.peers = peersList
-	registre.PutAllFilesFromDirectoryInRegister("bin/baseFiles", "bin/initialFiles")
+	registre.PutAllFilesFromDirectoryInRegister("bin/baseFiles", "bin/parts")
+	CleanUpPartsDirectory()
 
 }
 
 // Takes the siteID and intialize the files that the file should have at the beginning of the execution of the program based on the precreated common register
 func InitialiseRegistre(currentSiteID string, registre *Registre) {
 	fmt.Printf("Initialisation du registre pour le site %s\n", currentSiteID)
+}
+
+func CleanUpPartsDirectory() {
+	files, err := os.ReadDir("bin/parts")
+	if err != nil {
+		fmt.Printf("Error reading directory: %v\n", err)
+		return
+	}
+	for _, file := range files {
+		err := os.Remove("bin/parts/" + file.Name())
+		if err != nil {
+			fmt.Printf("Error removing file: %v\n", err)
+			return
+		}
+	}
 }

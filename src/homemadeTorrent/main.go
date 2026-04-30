@@ -18,6 +18,7 @@ func main() {
                                                                           `
 
 	fmt.Print("\n", asciiArt, "\n\n")
+	registre.CleanUpPartsDirectory()
 	registreTest := registre.NewRegistre()
 	registre.MakeInitialHardcodedRegister(registreTest)
 	registreTest.PrintRegister()
