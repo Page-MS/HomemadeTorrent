@@ -293,10 +293,12 @@ func NewRegistre() *Registre {
 //
 // Parameters:
 // - registre: an empty register to override with the initial hardcoded register
-func MakeInitialHardcodedRegister(registre *Registre) {
+// - sourcePath: the path to the directory containing the source files
+// - destinationPath: the path to the directory where the file parts will be stored
+func MakeInitialHardcodedRegister(registre *Registre, sourcePath string, destinationPath string) {
 	peersList := []string{"Mathy", "Alexis", "Noah", "Page"}
 	registre.peers = peersList
-	registre.PutAllFilesFromDirectoryInRegister("bin/baseFiles", "bin/parts")
+	registre.PutAllFilesFromDirectoryInRegister(sourcePath, destinationPath)
 	CleanUpPartsDirectory()
 	// We decide very arbitrary which peers have which files at the begining of the execution of the program
 	// TODO: make this more dynamic and less hardcoded

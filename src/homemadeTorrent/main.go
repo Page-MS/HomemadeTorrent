@@ -20,7 +20,7 @@ func main() {
 	fmt.Print("\n", asciiArt, "\n\n")
 	registre.CleanUpPartsDirectory()
 	registreTest := registre.NewRegistre()
-	registre.MakeInitialHardcodedRegister(registreTest)
+	registre.MakeInitialHardcodedRegister(registreTest, "bin/baseFiles", "bin/parts")
 	registreTest.PrintRegister()
 	currentSiteID := "Page"
 	registre.InitialiseRegistre(currentSiteID, registreTest)
