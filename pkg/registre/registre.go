@@ -35,6 +35,13 @@ type Registre struct {
 	peers []string
 }
 
+// Calculate the shasum of a file based on its path
+//
+// Parameters:
+// - filePath: the path of the file to calculate the shasum of
+//
+// Returns:
+// - the shasum of the file as a string, or an error if something went wrong
 func CalculateShasum(filePath string) string {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -51,6 +58,14 @@ func CalculateShasum(filePath string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
+// Split a file into parts of size FILE_PART_SIZE and return the informations about the file parts
+//
+// Parameters:
+// - filePath: the path of the file to split
+// - destination: the path of the directory where the file parts will be created
+//
+// Returns:
+// - a slice of filePart containing the informations about the file parts, or an error if something went wrong
 func SplitFile(filePath string, destination string) ([]filePart, error) {
 
 	// We get the name of the file
@@ -120,6 +135,13 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 	return fileParts, nil
 }
 
+// Get the information about a file based on its ID
+//
+// Parameters:
+// - fileID: the ID of the file to get
+//
+// Returns:
+// - a pointer to the file if it is found in the register, nil otherwise
 func (r *Registre) GetFileByID(fileID string) *file {
 	for i, file := range r.files {
 		if file.ID == fileID {
@@ -130,6 +152,15 @@ func (r *Registre) GetFileByID(fileID string) *file {
 	return nil
 }
 
+// Take all of the files of a directory and puts their informations in the register, and split them into parts in the destination folder
+//
+// Parameters:
+//
+// source: the path of the directory containing the files to put in the register
+//
+// destination: the path of the directory where the file parts will be created
+//
+// This is used at initialization
 func (r *Registre) PutAllFilesFromDirectoryInRegister(source string, destination string) {
 	files, err := os.ReadDir(source)
 	if err != nil {
@@ -158,8 +189,14 @@ func (r *Registre) PutAllFilesFromDirectoryInRegister(source string, destination
 	}
 }
 
-func initialisationFileCopy(file file, siteID string) {
-	fileURL := "bin/baseFiles/" + file.name
+// Copy the files to the folder of the current site
+//
+// Parameters:
+//
+// - file: the informations of the file to copy
+// - siteID: the ID of the current site, used to create the destination path of the file to copy
+func initialisationFileCopy(fileInfos file, siteID string) {
+	fileURL := "bin/baseFiles/" + fileInfos.name
 	filecontent, err := os.ReadFile(fileURL)
 	if err != nil {
 		fmt.Printf("Error reading file: %v\n", err)
@@ -174,17 +211,19 @@ func initialisationFileCopy(file file, siteID string) {
 		}
 	}
 
-	err = os.WriteFile("bin/"+siteID+"/"+"fullFiles"+siteID+"_"+file.name, filecontent, 0644)
+	err = os.WriteFile("bin/"+siteID+"/"+"fullFiles"+siteID+"_"+fileInfos.name, filecontent, 0644)
 	if err != nil {
 		fmt.Printf("Error writing file: %v\n", err)
 		return
 	}
 }
 
-func (r *Registre) AddFile(file file) {
-	r.files = append(r.files, file)
+// add the informations of a file in the register
+func (r *Registre) AddFile(fileInfos file) {
+	r.files = append(r.files, fileInfos)
 }
 
+// Return the list of peers in the register
 func (r *Registre) GetPeerList() []string {
 	if len(r.peers) == 0 {
 		fmt.Printf("No peers in the register\n")
@@ -193,6 +232,7 @@ func (r *Registre) GetPeerList() []string {
 	return r.peers
 }
 
+// Return the data structure of the files in the register
 func (r *Registre) GetFileList() []file {
 	if len(r.files) == 0 {
 		fmt.Printf("No files in the register\n")
@@ -201,6 +241,14 @@ func (r *Registre) GetFileList() []file {
 	return r.files
 }
 
+// Get the information about a file part based on the file ID and the file part ID
+//
+// Parameters:
+// - fileID: the ID of the file to which the file part belongs
+// - partID: the ID of the file part to get
+//
+// Returns:
+// - a pointer to the file part if it is found in the register, nil otherwise
 func (r *Registre) GetFilePart(fileID string, partID uint) *filePart {
 	file := r.GetFileByID(fileID)
 	if file == nil {
@@ -233,6 +281,7 @@ func (r *Registre) PrintRegister() {
 	}
 }
 
+// Create an empty register
 func NewRegistre() *Registre {
 	return &Registre{
 		files: []file{},
@@ -241,6 +290,9 @@ func NewRegistre() *Registre {
 }
 
 // Initialize and return the initial hardcoded register
+//
+// Parameters:
+// - registre: an empty register to override with the initial hardcoded register
 func MakeInitialHardcodedRegister(registre *Registre) {
 	peersList := []string{"Mathy", "Alexis", "Noah", "Page"}
 	registre.peers = peersList
@@ -263,6 +315,10 @@ func MakeInitialHardcodedRegister(registre *Registre) {
 }
 
 // Takes the siteID and intialize the files that the file should have at the beginning of the execution of the program based on the precreated common register
+//
+// Parameters:
+// - currentSiteID: the ID of the current site
+// - registre: the common register that contains the information about which files each site should have at the beginning of the execution of the program
 func InitialiseRegistre(currentSiteID string, registre *Registre) {
 	fmt.Printf("Initialisation du registre pour le site %s\n", currentSiteID)
 	// If the site ID is not in the register, we return an error
@@ -289,6 +345,9 @@ func InitialiseRegistre(currentSiteID string, registre *Registre) {
 
 }
 
+// CLean up the files in bin
+//
+// Is used between executions or after an intialization of the register to clean up the files in bin and avoid having old files that can interfere with the execution of the program
 func CleanUpPartsDirectory() {
 	files, err := os.ReadDir("bin/parts")
 	if err != nil {
