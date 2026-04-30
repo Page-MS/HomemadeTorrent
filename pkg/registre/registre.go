@@ -31,6 +31,7 @@ type file struct {
 
 type Registre struct {
 	files []file
+	peers []string
 }
 
 func CalculateShasum(filePath string) string {
@@ -45,7 +46,7 @@ func CalculateShasum(filePath string) string {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%x", h.Sum(nil))
+	//fmt.Printf("%x", h.Sum(nil))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
@@ -107,6 +108,7 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 		} else {
 			fileParts[i] = filePart{
 				parentFileID:   partFileName,
+				filePartID:     i + 1, // We start the file part ID at 1 for better readability
 				filePartSize:   partSize,
 				filePartShasum: filePartShasum,
 			}
@@ -174,6 +176,67 @@ func (r *Registre) AddFile(file file) {
 	r.files = append(r.files, file)
 }
 
-func InitialiseRegistre() {
-	fmt.Print("Initialise Registre")
+func (r *Registre) GetPeerList() []string {
+	if len(r.peers) == 0 {
+		fmt.Printf("No peers in the register\n")
+		return nil
+	}
+	return r.peers
+}
+
+func (r *Registre) GetFileList() []file {
+	if len(r.files) == 0 {
+		fmt.Printf("No files in the register\n")
+		return nil
+	}
+	return r.files
+}
+
+func (r *Registre) GetFilePart(fileID string, partID uint) *filePart {
+	file := r.GetFileByID(fileID)
+	if file == nil {
+		fmt.Printf("File with ID %s not found\n", fileID)
+		return nil
+	}
+	for i, part := range file.fileParts {
+		if part.filePartID == partID {
+			return &file.fileParts[i]
+		}
+	}
+	fmt.Printf("File part with ID %d not found in file with ID %s\n", partID, fileID)
+	return nil
+}
+
+// Print the register for debug purposes
+func (r *Registre) PrintRegister() {
+	if len(r.files) == 0 {
+		fmt.Printf("No files in the register\n")
+		return
+	}
+	for _, file := range r.files {
+		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n", file.name, file.ID, file.size, file.numberOfParts)
+		for _, part := range file.fileParts {
+			fmt.Printf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.filePartID, part.filePartSize, part.filePartShasum)
+		}
+	}
+}
+
+func NewRegistre() *Registre {
+	return &Registre{
+		files: []file{},
+		peers: []string{},
+	}
+}
+
+// Initialize and return the initial hardcoded register
+func MakeInitialHardcodedRegister(registre *Registre) {
+	peersList := []string{"Mathy", "Alexis", "Noah", "Page"}
+	registre.peers = peersList
+	registre.PutAllFilesFromDirectoryInRegister("bin/baseFiles", "bin/initialFiles")
+
+}
+
+// Takes the siteID and intialize the files that the file should have at the beginning of the execution of the program based on the precreated common register
+func InitialiseRegistre(currentSiteID string, registre *Registre) {
+	fmt.Printf("Initialisation du registre pour le site %s\n", currentSiteID)
 }

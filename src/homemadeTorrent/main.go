@@ -8,7 +8,20 @@ import (
 
 func main() {
 
-	fmt.Print("Hello, World!")
-	registre.InitialiseRegistre()
-	event_loop.Start()
+	asciiArt := `  _  _                             _       _____                    _     
+ | || |___ _ __  ___ _ __  __ _ __| |___  |_   _|__ _ _ _ _ ___ _ _| |_   
+ | __ / _ \ '  \/ -_) '  \/ _\ / _\ / -_)   | |/ _ \ '_| '_/ -_) ' \  _|  
+ |_||_\___/_|_|_\___|_|_|_\__,_\__,_\___|   |_|\___/_| |_| \___|_||_\__|  
+  ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ 
+ |___|___|___|___|___|___|___|___|___|___|___|___|___|___|___|___|___|___|
+                                                                          
+                                                                          `
+
+	fmt.Print("\n", asciiArt, "\n\n")
+	registreTest := registre.NewRegistre()
+	registre.MakeInitialHardcodedRegister(registreTest)
+	registreTest.PrintRegister()
+	currentSiteID := "site1"
+	registre.InitialiseRegistre(currentSiteID, registreTest)
+	event_loop.Start(registreTest.GetPeerList(), currentSiteID)
 }
