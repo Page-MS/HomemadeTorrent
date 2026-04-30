@@ -3,16 +3,16 @@ package clock
 import "sync"
 
 type VectorClock struct {
-	vector []int
-	id     int // indice du site dans le tableau vector
-	mu     sync.Mutex
+	vector    []int
+	siteIndex int // indice du site dans le tableau vector
+	mu        sync.Mutex
 }
 
 // NewVectorClock initialise l'horloge avec le nombre de sites total
-func NewVectorClock(nbSites int, siteID int) *VectorClock {
+func NewVectorClock(nbSites int, siteIndex int) *VectorClock {
 	return &VectorClock{
-		vector: make([]int, nbSites),
-		id:     siteID,
+		vector:    make([]int, nbSites),
+		siteIndex: siteIndex,
 	}
 }
 
@@ -20,7 +20,7 @@ func NewVectorClock(nbSites int, siteID int) *VectorClock {
 func (vc *VectorClock) Tick() {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
-	vc.vector[vc.id]++
+	vc.vector[vc.siteIndex]++
 }
 
 // Update prend le max de chaque case entre le vecteur local et reçu (regle de Lamport du cours)
@@ -35,7 +35,7 @@ func (vc *VectorClock) Update(remoteVector []int) {
 		}
 	}
 	// On incrémente aussi notre propre case
-	vc.vector[vc.id]++
+	vc.vector[vc.siteIndex]++
 }
 
 // GetCopy retourne une copie du vecteur actuel (pour l'envoyer dans un message)

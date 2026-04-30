@@ -1,6 +1,7 @@
 package event_loop
 
 import (
+	"HomemadeTorrent/pkg/control"
 	"bufio"
 	"fmt"
 	"log"
@@ -15,19 +16,32 @@ const (
 	WriteMessage
 )
 
+type EventSource int
+
+const (
+	FromNetwork EventSource = iota
+	FromLocalApp
+)
+
 // Un evenement contient un message à lire/ecrire
 type Event struct {
-	Type EventType
-	Data string
+	Type   EventType
+	Source EventSource
+	Data   string
 }
 
-func Start() {
+func Start(allSiteIDs []string, siteID string) {
+	// Channels
 	eventQueue := make(chan Event, 100)
-	processingChan := make(chan string, 100)
+	processingChan := make(chan Event, 100)
+	localAppChan := make(chan string, 100)
 
-	// Configuration des "interruptions"
+	// Controler et app torrent
+	controler := control.NewController(siteID, allSiteIDs)
+
 	go listenStdEntry(eventQueue)
-	go siteLogic(processingChan, eventQueue)
+	go listenLocalApp(localAppChan, eventQueue)
+	go siteLogic(processingChan, eventQueue, controler)
 
 	// Event loop (bloquante)
 	for {
@@ -35,7 +49,8 @@ func Start() {
 
 		switch event.Type {
 		case ReadMessage:
-			read(event.Data, processingChan)
+			// Passer le message à la go-routine de traitement pour traitement
+			processingChan <- event
 
 		case WriteMessage:
 			write(event.Data)
@@ -53,28 +68,44 @@ func listenStdEntry(queue chan<- Event) {
 		}
 		log.Println("Message lu en entrée:", msg)
 		queue <- Event{
-			Type: ReadMessage,
-			Data: msg,
+			Type:   ReadMessage,
+			Source: FromNetwork,
+			Data:   msg,
 		}
 	}
 }
 
-func siteLogic(input <-chan string, eventQueue chan<- Event) {
+func listenLocalApp(appChan <-chan string, queue chan<- Event) {
+	for msg := range appChan {
+		queue <- Event{
+			Type:   ReadMessage,
+			Source: FromLocalApp,
+			Data:   msg,
+		}
+	}
+}
+
+func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controller) {
 	for msg := range input {
-		// Passage au controle (decode + algo réparti)
-		log.Println("Message passé au contrôleur:", msg)
 
-		// Envoie reponse dans la queue d'actions
-		eventQueue <- Event{
-			Type: WriteMessage,
-			Data: "response de la logique du site",
+		var responses []string
+
+		switch msg.Source {
+
+		case FromNetwork:
+			responses = c.HandleIncomingFromNetwork(msg.Data)
+
+		case FromLocalApp:
+			responses = c.HandleIncomingFromLocal(msg.Data)
+		}
+
+		for _, r := range responses {
+			eventQueue <- Event{
+				Type: WriteMessage,
+				Data: r,
+			}
 		}
 	}
-}
-
-func read(raw string, processingChan chan<- string) {
-	// Passer le message à la go-routine de traitement pour traitement
-	processingChan <- raw
 }
 
 func write(msg string) {
