@@ -164,7 +164,7 @@ func initialisationFileCopy(file file, siteID string) {
 		fmt.Printf("Error reading file: %v\n", err)
 		return
 	}
-	err = os.WriteFile("bin/"+siteID+"/"+siteID+"_"+file.name, filecontent, 0644)
+	err = os.WriteFile("bin/"+siteID+"/"+"fullFiles"+siteID+"_"+file.name, filecontent, 0644)
 	if err != nil {
 		fmt.Printf("Error writing file: %v\n", err)
 		return
@@ -213,7 +213,10 @@ func (r *Registre) PrintRegister() {
 		return
 	}
 	for _, file := range r.files {
-		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n", file.name, file.ID, file.size, file.numberOfParts)
+		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.name, file.ID, file.size, file.numberOfParts)
+		for _, peer := range file.peersThatHaveFileID {
+			fmt.Printf("\tPeer that has the file: %s\n", peer)
+		}
 		for _, part := range file.fileParts {
 			fmt.Printf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.filePartID, part.filePartSize, part.filePartShasum)
 		}
@@ -233,6 +236,19 @@ func MakeInitialHardcodedRegister(registre *Registre) {
 	registre.peers = peersList
 	registre.PutAllFilesFromDirectoryInRegister("bin/baseFiles", "bin/parts")
 	CleanUpPartsDirectory()
+	// We decide very arbitrary which peers have which files at the begining of the execution of the program
+	// TODO: make this more dynamic and less hardcoded
+	for i := range registre.GetFileList() {
+		if i%4 == 0 {
+			registre.files[i].peersThatHaveFileID = []string{"Mathy", "Alexis"}
+		} else if i%4 == 1 {
+			registre.files[i].peersThatHaveFileID = []string{"Noah", "Page"}
+		} else if i%4 == 2 {
+			registre.files[i].peersThatHaveFileID = []string{"Mathy", "Noah"}
+		} else {
+			registre.files[i].peersThatHaveFileID = []string{"Alexis", "Page"}
+		}
+	}
 
 }
 
