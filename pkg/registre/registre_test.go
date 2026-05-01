@@ -53,3 +53,71 @@ func TestPutAllFilesFromDirectoryInRegister(t *testing.T) {
 		}
 	}
 }
+
+func TestMakeInitialHardcodedRegister(t *testing.T) {
+	reg := Registre{}
+	MakeInitialHardcodedRegister(&reg, "../../bin/baseFiles", "../../bin/parts")
+	reg.PrintRegister()
+	if len(reg.files) == 0 {
+		t.Error("Expected at least one file in the register, got 0")
+	}
+	for _, file := range reg.files {
+		if file.name == "" {
+			t.Error("Expected non-empty file name, got empty string")
+		}
+		if file.ID == "" {
+			t.Error("Expected non-empty file ID, got empty string")
+		}
+		if file.size <= 0 {
+			t.Errorf("Expected file size greater than 0, got %d", file.size)
+		}
+		if file.numberOfParts <= 0 {
+			t.Errorf("Expected number of parts greater than 0, got %d", file.numberOfParts)
+		}
+		if len(file.fileParts) != int(file.numberOfParts) {
+			t.Errorf("Expected file parts length %d, got %d", file.numberOfParts, len(file.fileParts))
+		}
+		for _, part := range file.fileParts {
+			if part.filePartSize <= 0 {
+				t.Errorf("Expected part size greater than 0, got %d", part.filePartSize)
+			}
+			if part.filePartShasum == "" {
+				t.Error("Expected non-empty shasum for file part")
+			}
+		}
+	}
+}
+
+func TestInitialiseRegistre(t *testing.T) {
+	reg := Registre{}
+	MakeInitialHardcodedRegister(&reg, "../../bin/baseFiles", "../../bin/parts")
+	InitialiseRegistre("Page", &reg)
+	if len(reg.files) == 0 {
+		t.Error("Expected at least one file in the register, got 0")
+	}
+	for _, file := range reg.files {
+		if file.name == "" {
+			t.Error("Expected non-empty file name, got empty string")
+		}
+		if file.ID == "" {
+			t.Error("Expected non-empty file ID, got empty string")
+		}
+		if file.size <= 0 {
+			t.Errorf("Expected file size greater than 0, got %d", file.size)
+		}
+		if file.numberOfParts <= 0 {
+			t.Errorf("Expected number of parts greater than 0, got %d", file.numberOfParts)
+		}
+		if len(file.fileParts) != int(file.numberOfParts) {
+			t.Errorf("Expected file parts length %d, got %d", file.numberOfParts, len(file.fileParts))
+		}
+		for _, part := range file.fileParts {
+			if part.filePartSize <= 0 {
+				t.Errorf("Expected part size greater than 0, got %d", part.filePartSize)
+			}
+			if part.filePartShasum == "" {
+				t.Error("Expected non-empty shasum for file part")
+			}
+		}
+	}
+}
