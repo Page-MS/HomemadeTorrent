@@ -17,8 +17,11 @@ type Message = struct {
 	Sender      string
 	Object      string
 	Chunk       int
-	payload_len int
+	Payload_len int
 	Payload     string
+	// pour snapshot
+	Color string
+	Bilan int
 }
 
 // ACTION:qlksdjfqmlsdfjmqsdlkf
@@ -117,7 +120,7 @@ func Decode(raw_data string) (Message, error) {
 				if err != nil {
 					return Message{}, errors.New("Impossible to payload_len")
 				}
-				msg.payload_len = val
+				msg.Payload_len = val
 				msg.Payload = lines[i+1]
 				if len(msg.Payload) <= 0 {
 					return Message{}, errors.New("Provided payload len but no payload")
@@ -126,9 +129,18 @@ func Decode(raw_data string) (Message, error) {
 				return msg, nil // return now
 			}
 
+		case "COLOR":
+			msg.Color = value
+
+		case "BILAN":
+			val, err := strconv.Atoi(value)
+			if err != nil {
+				return Message{}, errors.New("Impossible to BILAN")
+			}
+			msg.Bilan = val
 		default:
 			{
-				return Message{}, errors.New("Found unknonw field: " + key)
+				return Message{}, errors.New("Found unknown field: " + key)
 			}
 		}
 	}
@@ -177,6 +189,14 @@ func Encode(msg Message) (string, error) {
 	if payload_len > 0 {
 		data = append(data, "PAYLOAD_LEN:"+strconv.Itoa(payload_len))
 		data = append(data, msg.Payload)
+	}
+
+	if msg.Color != "" {
+		data = append(data, "COLOR:"+msg.Color)
+	}
+
+	if msg.Action == "STATE_COLLECT" {
+		data = append(data, "BILAN:"+strconv.Itoa(msg.Bilan))
 	}
 
 	return strings.Join(data, "\n"), nil
