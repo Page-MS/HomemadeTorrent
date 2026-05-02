@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 
@@ -92,8 +93,9 @@ func Decode(raw_data string) (Message, error) {
 
 		case "STAMP":
 			{
-				val, err := strconv.Atoi(value)
+				val, err := strconv.Atoi(strings.TrimSpace(value))
 				if err != nil {
+					log.Printf("[PARSER] Erreur: %v\n", err)
 					return Message{}, errors.New("Impossible to convert STAMP value")
 				}
 				msg.Stamp = val
@@ -103,7 +105,7 @@ func Decode(raw_data string) (Message, error) {
 			{
 				msg.Vect = make([]int, 0)
 				for _, val := range strings.Split(value, ",") {
-					nb, err := strconv.Atoi(val)
+					nb, err := strconv.Atoi(strings.TrimSpace(val))
 					if err != nil {
 						return Message{}, errors.New("Impossible to convert VECT value")
 					}

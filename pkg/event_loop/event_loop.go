@@ -77,13 +77,14 @@ func listenStdEntry(queue chan<- Event) {
 			msg := buffer.String()
 			buffer.Reset()
 
-			log.Println("[EVENT_LOOP] Message lu en entrée:", string(msg))
+			log.Printf("[EVENT_LOOP] Message lu en entrée: %s\n", msg)
 
 			queue <- Event{
 				Type:   ReadMessage,
 				Source: FromNetwork,
 				Data:   msg,
 			}
+			continue
 		}
 
 		buffer.WriteString(line)
