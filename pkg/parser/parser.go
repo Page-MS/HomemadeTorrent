@@ -56,7 +56,7 @@ func Decode(raw_data string) (Message, error) {
 			return Message{}, errors.New("Message line must have exactly 2 component. Found: " + strings.Join(parts, " "))
 		}
 		key := parts[0]
-		value := parts[1]
+		value := strings.TrimSpace(parts[1])
 
 		switch key {
 		case "ACTION":
@@ -93,7 +93,7 @@ func Decode(raw_data string) (Message, error) {
 
 		case "STAMP":
 			{
-				val, err := strconv.Atoi(strings.TrimSpace(value))
+				val, err := strconv.Atoi(value)
 				if err != nil {
 					log.Printf("[PARSER] Erreur: %v\n", err)
 					return Message{}, errors.New("Impossible to convert STAMP value")

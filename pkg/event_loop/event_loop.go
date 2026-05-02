@@ -32,6 +32,9 @@ type Event struct {
 }
 
 func Start(allSiteIDs []string, siteID string) {
+	logFile, _ := os.Create(siteID + ".log")
+	log.SetOutput(logFile)
+
 	// Channels
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)

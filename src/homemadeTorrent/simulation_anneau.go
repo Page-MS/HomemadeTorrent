@@ -44,7 +44,7 @@ func testAnneau() {
 			msg: `ACTION:SC_REQUEST
 ID:msg-1
 DEST:-1
-SENDER:0
+SENDER:2
 STAMP:1
 VECT:1,0,0`,
 		},
