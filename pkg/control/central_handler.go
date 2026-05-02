@@ -1,6 +1,7 @@
 package control
 
 import (
+	"HomemadeTorrent/pkg/snapshot"
 	"log"
 	"sort"
 
@@ -24,6 +25,7 @@ type Controller struct {
 	SiteIndex        int             // index du site
 	SeenMessages     map[string]bool // Messages déjà vu par le site
 	NetworkDirectory SiteDirectory   // Correspondance SiteId et index
+	Snapshot         *snapshot.Snapshot
 }
 
 // Adapter cette valeur en focntion de la convention choisie
@@ -41,6 +43,11 @@ func NewController(siteID string, allSiteIDs []string) *Controller {
 		SiteIndex:        dir.IDToIndex[siteID],
 		SeenMessages:     make(map[string]bool),
 		NetworkDirectory: dir,
+		Snapshot: &snapshot.Snapshot{
+			MyColor:     snapshot.White,
+			Bilan:       0,
+			IsInitiator: false,
+		},
 	}
 }
 
@@ -94,6 +101,31 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		return responses
 	}
 
+	// ------------- Logique Snapshot --------------
+
+	// Chaque réception diminue le bilan local.
+	// On ne décrémente le bilan que pour les messages torrent pas pour les autres messages
+	if isApplicationMessage(pMsg.Action) {
+		c.Snapshot.Bilan--
+	}
+
+	// Si on reçoit rouge alors qu'on est blanc on peut notre instantané avant de traiter le message.
+	if pMsg.Color == "rouge" && c.Snapshot.MyColor == "blanc" {
+		log.Printf("[SNAPSHOT] Lestage détecté (Msg ROUGE sur Site BLANC). Clic forcé.")
+		msgSnapshot := c.triggerLocalSnapshot(false)
+		if msgSnapshot != "" {
+			responses = append(responses, msgSnapshot)
+		}
+	}
+
+	// Détection des messages Prépost : Envoyé blanc, reçu rouge
+	if pMsg.Color == "blanc" && c.Snapshot.MyColor == "rouge" {
+		log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
+		// On crée un message de contrôle pour envoyer ce contenu à l'initiateur
+		prepostMsg := c.formatPrepostForInitiator(pMsg)
+		responses = append(responses, prepostMsg)
+	}
+
 	// ------------- Logique controler --------------
 	// synchro des horloges
 	c.Lamport.Update(pMsg.Stamp)
@@ -114,7 +146,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	// snapshot
 	// TODO: Remplacer par les constantes des actions de sauvegarde
-	case "MARKER":
+	case "MARKER", "PREPOST_COLLECT", "SAVE_COLLECT":
 		log.Printf("[CONTROLLER] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
 
@@ -140,8 +172,31 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 }
 
 // TODO: HandleIncomingFromLocal gère les demande venant de l'app Torrent
-func (c *Controller) HandleIncomingFromLocal(msg string) []string {
-	return nil
+func (c *Controller) HandleIncomingFromLocal(raw string) []string {
+	var responses []string
+	pMsg, err := parser.Decode(raw)
+	if err != nil {
+		log.Printf("[LOCAL] Erreur décodage commande locale: %v\n", err)
+		return nil
+	}
+
+	//Maj du bilan
+	if isApplicationMessage(pMsg.Action) {
+		c.Snapshot.Bilan++
+	}
+
+	// Maj couleur
+	pMsg.Color = string(c.Snapshot.MyColor)
+
+	pMsg.Sender = c.SiteID
+	encodedMsg, err := parser.Encode(pMsg)
+	if err != nil {
+		log.Printf("[LOCAL] Erreur encodage pour réseau: %v\n", err)
+		return nil
+	}
+
+	responses = append(responses, encodedMsg)
+	return responses
 }
 
 // getSiteIndexFromID fais la correspondance entre nom de site et index

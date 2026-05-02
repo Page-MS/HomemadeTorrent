@@ -35,15 +35,32 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 
 	returnMsg, err := c.FileMessageToParserMessage(responseMsg)
 	if err != nil {
-		log.Printf("[CONTROLLER] Conversion message file vers message parser impossible | Message: %s | Erreur: %v\n", returnMsg, err)
+		log.Printf("[CONTROLLER] Conversion message file vers message parser impossible | Message: %+v | Erreur: %v\n", returnMsg, err)
 		return parser.Message{}
 	}
 	return returnMsg
 }
 
-// TODO : handleSnapshot qui appelera le package de snapshot
 func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
-	log.Printf("[SNAPSHOT] Déclenchement via marker de %s", pMsg.Id)
+	if !c.Snapshot.IsInitiator {
+		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+		return pMsg
+	}
+
+	switch pMsg.Action {
+	case "STATE_COLLECT":
+		c.Snapshot.NbEtatsAttendus--
+		c.Snapshot.NbMsgAttendus += pMsg.Bilan
+		// c.Snapshot.CollectedStates = append(...)
+
+	case "PREPOST_COLLECT":
+		c.Snapshot.NbMsgAttendus--
+	}
+
+	// terminaison
+	if c.Snapshot.NbEtatsAttendus == 0 && c.Snapshot.NbMsgAttendus == 0 {
+		c.finalizeSnapshot()
+	}
 
 	return parser.Message{}
 }
