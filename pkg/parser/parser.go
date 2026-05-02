@@ -179,5 +179,5 @@ func Encode(msg Message) (string, error) {
 		data = append(data, msg.Payload)
 	}
 
-	return strings.Join(data, "\n"), nil
+	return strings.Join(data, "\n") + "\n", nil
 }
