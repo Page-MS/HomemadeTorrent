@@ -101,7 +101,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		return responses
 	}
 
-	// ------------- 3. Logique Snapshot (Lestage & Bilan) --------------
+	// ------------- Logique Snapshot --------------
 
 	// Chaque réception diminue le bilan local.
 	// On ne décrémente le bilan que pour les messages torrent pas pour les autres messages
@@ -112,7 +112,10 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	// Si on reçoit rouge alors qu'on est blanc on peut notre instantané avant de traiter le message.
 	if pMsg.Color == "rouge" && c.Snapshot.MyColor == "blanc" {
 		log.Printf("[SNAPSHOT] Lestage détecté (Msg ROUGE sur Site BLANC). Clic forcé.")
-		c.triggerLocalSnapshot(false) // snapshot locale
+		msgSnapshot := c.triggerLocalSnapshot(false)
+		if msgSnapshot != "" {
+			responses = append(responses, msgSnapshot)
+		}
 	}
 
 	// Détection des messages Prépost : Envoyé blanc, reçu rouge
@@ -143,7 +146,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	// snapshot
 	// TODO: Remplacer par les constantes des actions de sauvegarde
-	case "MARKER":
+	case "MARKER", "PREPOST_COLLECT", "SAVE_COLLECT":
 		log.Printf("[CONTROLLER] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
 

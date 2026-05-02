@@ -7,7 +7,7 @@ import (
 )
 
 // triggerLocalSnapshot effectue l'action de "clic"
-func (c *Controller) triggerLocalSnapshot(isInitiator bool) {
+func (c *Controller) triggerLocalSnapshot(isInitiator bool) string {
 	// passage au rouge
 	c.Snapshot.MyColor = snapshot.Red
 	c.Snapshot.IsInitiator = isInitiator
@@ -27,9 +27,10 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool) {
 		c.Snapshot.NbMsgAttendus = c.Snapshot.Bilan
 		// On ajoute notre propre état à la collecte
 		c.Snapshot.CollectedStates = append(c.Snapshot.CollectedStates, c.Snapshot.SavedRegister)
+		return ""
 	} else {
 		// Sinon, on envoie notre état et notre bilan
-		c.sendStateOnRing()
+		return c.sendStateOnRing()
 	}
 }
 
@@ -53,7 +54,7 @@ func (c *Controller) formatPrepostForInitiator(pMsg parser.Message) string {
 }
 
 // sendStateOnRing envoie l'état local et le bilan au successeur
-func (c *Controller) sendStateOnRing() {
+func (c *Controller) sendStateOnRing() string {
 	stateMsg := parser.Message{
 		Action: "STATE_COLLECT",
 		Sender: c.SiteID,
@@ -63,11 +64,14 @@ func (c *Controller) sendStateOnRing() {
 		// TODO : serialiser le registre dans le payload
 	}
 
-	res, _ := parser.Encode(stateMsg)
-	// Simule lenvoi au controlleur
-	log.Printf("[SNAPSHOT] État local envoyé au successeur sur l'anneau.\n")
-	_ = res
-	// TODO : a envoyer au réseau
+	res, err := parser.Encode(stateMsg)
+	if err != nil {
+		log.Printf("[ERROR] Erreur encodage message: %v\n", err)
+		return ""
+	}
+
+	log.Printf("[SNAPSHOT] État local préparé pour le successeur (Bilan: %d).\n", c.Snapshot.Bilan)
+	return res
 }
 
 // getSuccessorIndex trouve l'index du site suivant sur l'anneau
