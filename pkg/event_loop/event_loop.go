@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 )
 
 // Definitions des evenements
@@ -20,7 +21,7 @@ type EventSource int
 
 const (
 	FromNetwork EventSource = iota
-	FromLocalApp
+	FromLocalUser
 )
 
 // Un evenement contient un message à lire/ecrire
@@ -31,17 +32,22 @@ type Event struct {
 }
 
 func Start(allSiteIDs []string, siteID string) {
+	logFile, _ := os.Create(siteID + ".log")
+	log.SetOutput(logFile)
+
 	// Channels
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
-	localAppChan := make(chan string, 100)
+	localUserChan := make(chan string, 100)
 
 	// Controler et app torrent
 	controler := control.NewController(siteID, allSiteIDs)
 
 	go listenStdEntry(eventQueue)
-	go listenLocalApp(localAppChan, eventQueue)
+	go listenUserInput(localUserChan, eventQueue)
 	go siteLogic(processingChan, eventQueue, controler)
+
+	log.Printf("[EVENT_LOOP] START\n")
 
 	// Event loop (bloquante)
 	for {
@@ -49,7 +55,7 @@ func Start(allSiteIDs []string, siteID string) {
 
 		switch event.Type {
 		case ReadMessage:
-			// Passer le message à la go-routine de traitement pour traitement
+			// Passer le message à la go-routine contenant la logique du site
 			processingChan <- event
 
 		case WriteMessage:
@@ -60,28 +66,49 @@ func Start(allSiteIDs []string, siteID string) {
 
 func listenStdEntry(queue chan<- Event) {
 	reader := bufio.NewReader(os.Stdin)
+	var buffer strings.Builder
 
 	for {
-		msg, err := reader.ReadString('\n')
+		line, err := reader.ReadString('\n')
 		if err != nil {
+			log.Println("[EVENT_LOOP] Lecture impossible, entrée ignorée")
 			continue
 		}
-		log.Println("Message lu en entrée:", msg)
+
+		if strings.TrimSpace(line) == "" {
+			// fin de message
+			msg := buffer.String()
+			buffer.Reset()
+
+			log.Printf("[EVENT_LOOP] Message lu en entrée: %s\n", msg)
+
+			queue <- Event{
+				Type:   ReadMessage,
+				Source: FromNetwork,
+				Data:   msg,
+			}
+			continue
+		}
+
+		buffer.WriteString(line)
+	}
+}
+
+func listenUserInput(userInputChan <-chan string, queue chan<- Event) {
+	for msg := range userInputChan {
 		queue <- Event{
 			Type:   ReadMessage,
-			Source: FromNetwork,
+			Source: FromLocalUser,
 			Data:   msg,
 		}
 	}
 }
 
-func listenLocalApp(appChan <-chan string, queue chan<- Event) {
-	for msg := range appChan {
-		queue <- Event{
-			Type:   ReadMessage,
-			Source: FromLocalApp,
-			Data:   msg,
-		}
+func write(msg string) {
+	log.Println("[EVENT_LOOP] Message ecrit en sortie:", msg)
+	_, err := fmt.Fprintf(os.Stdout, msg+"\n")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Erreur écriture stdout: %v\n", err)
 	}
 }
 
@@ -95,7 +122,7 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controlle
 		case FromNetwork:
 			responses = c.HandleIncomingFromNetwork(msg.Data)
 
-		case FromLocalApp:
+		case FromLocalUser:
 			responses = c.HandleIncomingFromLocal(msg.Data)
 		}
 
@@ -105,13 +132,5 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controlle
 				Data: r,
 			}
 		}
-	}
-}
-
-func write(msg string) {
-	log.Println("Message ecrit en sortie:", msg)
-	_, err := fmt.Fprintln(os.Stdout, msg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Erreur écriture stdout: %v\n", err)
 	}
 }

@@ -1,14 +1,30 @@
 package main
 
 import (
-	event_loop "HomemadeTorrent/pkg/event_loop"
-	registre "HomemadeTorrent/pkg/registre"
-	"fmt"
+	"HomemadeTorrent/pkg/event_loop"
+	"log"
+	"os"
 )
 
 func main() {
 
-	fmt.Print("Hello, World!")
-	registre.InitialiseRegistre()
-	event_loop.Start()
+	// Lectures des arguments
+	args := os.Args[1:]
+
+	if len(args) < 2 {
+		log.Fatal("Usage:\n" +
+			"  program <siteID> <allSiteIDs...>\n\n" +
+			"Example:\n" +
+			"  go run main.go Site1 Site1 Site2 Site3")
+	}
+
+	siteID := args[0]
+	allSiteIDs := args[1:]
+
+	// Initialisations des composants du site
+
+	// Lancement boucle
+
+	event_loop.Start(allSiteIDs, siteID)
+
 }

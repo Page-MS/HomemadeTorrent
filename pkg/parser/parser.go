@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"log"
 	"strconv"
 	"strings"
 
@@ -58,7 +59,7 @@ func Decode(raw_data string) (Message, error) {
 			return Message{}, errors.New("Message line must have exactly 2 component. Found: " + strings.Join(parts, " "))
 		}
 		key := parts[0]
-		value := parts[1]
+		value := strings.TrimSpace(parts[1])
 
 		switch key {
 		case "ACTION":
@@ -97,6 +98,7 @@ func Decode(raw_data string) (Message, error) {
 			{
 				val, err := strconv.Atoi(value)
 				if err != nil {
+					log.Printf("[PARSER] Erreur: %v\n", err)
 					return Message{}, errors.New("Impossible to convert STAMP value")
 				}
 				msg.Stamp = val
@@ -106,7 +108,7 @@ func Decode(raw_data string) (Message, error) {
 			{
 				msg.Vect = make([]int, 0)
 				for _, val := range strings.Split(value, ",") {
-					nb, err := strconv.Atoi(val)
+					nb, err := strconv.Atoi(strings.TrimSpace(val))
 					if err != nil {
 						return Message{}, errors.New("Impossible to convert VECT value")
 					}
@@ -198,6 +200,5 @@ func Encode(msg Message) (string, error) {
 	if msg.Action == "STATE_COLLECT" {
 		data = append(data, "BILAN:"+strconv.Itoa(msg.Bilan))
 	}
-
-	return strings.Join(data, "\n"), nil
+	return strings.Join(data, "\n") + "\n", nil
 }

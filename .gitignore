@@ -33,3 +33,10 @@ go.work.sum
 
 /bin/parts
 
+/bin/Page
+/bin/Mathy
+/bin/Alexis
+/bin/Noah
+
+# Logs files
+*.log
