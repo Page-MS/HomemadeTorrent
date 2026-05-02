@@ -14,7 +14,7 @@ func (c *Controller) ParserMessageToFileMessage(pMsg parser.Message) (distribute
 
 	return distributed_file.Message{
 		Type:        fileMsgType,
-		IndexSender: c.getSiteIndexFromID(pMsg.Id),
+		IndexSender: c.getSiteIndexFromID(pMsg.Sender),
 		ClockValue:  pMsg.Stamp,
 	}, nil
 }

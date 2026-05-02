@@ -155,6 +155,12 @@ func (c *Controller) getIdFromSIteIndex(index int) string {
 }
 
 func (c *Controller) routeMessage(pMsg parser.Message) (processLocal bool, forward bool) {
+	// Vérifier que les informations pour le routage sont présentes
+	if len(pMsg.Sender) == 0 || len(pMsg.Dest) == 0 {
+		log.Printf("[ROUTAGE] Impossible de router ce message incomplet (pas de destinataire ou d'envoyeur), ignoré\n")
+		return false, false
+	}
+
 	// Cas Message pour soi meme
 	if pMsg.Sender == c.SiteID {
 		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré\n")

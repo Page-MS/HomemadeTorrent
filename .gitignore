@@ -37,3 +37,6 @@ go.work.sum
 /bin/Mathy
 /bin/Alexis
 /bin/Noah
+
+# Logs files
+*.log

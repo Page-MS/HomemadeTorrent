@@ -1,28 +1,30 @@
 package main
 
 import (
-	event_loop "HomemadeTorrent/pkg/event_loop"
-	registre "HomemadeTorrent/pkg/registre"
-	"fmt"
+	"HomemadeTorrent/pkg/event_loop"
+	"log"
+	"os"
 )
 
 func main() {
 
-	asciiArt := `  _  _                             _       _____                    _     
- | || |___ _ __  ___ _ __  __ _ __| |___  |_   _|__ _ _ _ _ ___ _ _| |_   
- | __ / _ \ '  \/ -_) '  \/ _\ / _\ / -_)   | |/ _ \ '_| '_/ -_) ' \  _|  
- |_||_\___/_|_|_\___|_|_|_\__,_\__,_\___|   |_|\___/_| |_| \___|_||_\__|  
-  ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ ___ 
- |___|___|___|___|___|___|___|___|___|___|___|___|___|___|___|___|___|___|
-                                                                          
-                                                                          `
+	// Lectures des arguments
+	args := os.Args[1:]
 
-	fmt.Print("\n", asciiArt, "\n\n")
-	registre.CleanUpPartsDirectory()
-	registreTest := registre.NewRegistre()
-	registre.MakeInitialHardcodedRegister(registreTest, "bin/baseFiles", "bin/parts")
-	registreTest.PrintRegister()
-	currentSiteID := "Page"
-	registre.InitialiseRegistre(currentSiteID, registreTest)
-	event_loop.Start(registreTest.GetPeerList(), currentSiteID)
+	if len(args) < 2 {
+		log.Fatal("Usage:\n" +
+			"  program <siteID> <allSiteIDs...>\n\n" +
+			"Example:\n" +
+			"  go run main.go Site1 Site1 Site2 Site3")
+	}
+
+	siteID := args[0]
+	allSiteIDs := args[1:]
+
+	// Initialisations des composants du site
+
+	// Lancement boucle
+
+	event_loop.Start(allSiteIDs, siteID)
+
 }
