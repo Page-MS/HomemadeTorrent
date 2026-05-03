@@ -9,6 +9,13 @@ const (
 	Red   Color = "rouge"
 )
 
+const (
+	MARKER          string = "MARKER"
+	PREPOST_COLLECT string = "PREPOST_COLLECT"
+	STATE_COLLECT   string = "STATE_COLLECT"
+	RESET_SNAPSHOT  string = "RESET_SNAPSHOT"
+)
+
 type Snapshot struct {
 	MyColor     Color
 	IsInitiator bool

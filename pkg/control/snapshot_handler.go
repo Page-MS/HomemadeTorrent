@@ -47,7 +47,7 @@ func (c *Controller) formatPrepostForInitiator(pMsg parser.Message) string {
 	// Un message prépost est un message envoyé blanc reçu rouge
 	prepost := parser.Message{
 		Id:      uuid.New().String(),
-		Action:  "PREPOST_COLLECT",
+		Action:  snapshot.PREPOST_COLLECT,
 		Sender:  c.SiteID,
 		Dest:    c.getIdFromSIteIndex(c.getSuccessorIndex()),                     // forward sur l'anneau
 		Payload: pMsg.Sender + " a envoyé " + pMsg.Action + " : " + pMsg.Payload, // contenu du message d'origine
@@ -69,7 +69,7 @@ func (c *Controller) sendStateOnRing() string {
 	log.Printf("[DEBUG-SEND] Mon bilan actuel au moment de l'envoi : %d", c.Snapshot.Bilan)
 	stateMsg := parser.Message{
 		Id:      uuid.New().String(),
-		Action:  "STATE_COLLECT",
+		Action:  snapshot.STATE_COLLECT,
 		Sender:  c.SiteID,
 		Stamp:   c.Lamport.GetValue(),
 		Vect:    c.Vector.GetCopy(),
@@ -117,7 +117,7 @@ func (c *Controller) finalizeSnapshot() parser.Message {
 	// TODO : sauvegarder c.Snapshot.CollectedStates et c.Snapshot.CollectedPreposts dans un fichier JSON par exemple
 
 	resetMsg := parser.Message{
-		Action: "RESET_SNAPSHOT",
+		Action: snapshot.RESET_SNAPSHOT,
 		Id:     uuid.New().String(),
 		Sender: c.SiteID,
 		Stamp:  c.Lamport.GetValue(),

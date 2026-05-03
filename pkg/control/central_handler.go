@@ -93,7 +93,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	// -------------- Routage ------------------------
 	// Eviter la duplication des messages causé par BROADCAST
 	if c.SeenMessages[pMsg.Id] {
-		if pMsg.Action == "MARKER" && c.Snapshot.IsInitiator {
+		if pMsg.Action == snapshot.MARKER && c.Snapshot.IsInitiator {
 			log.Printf("[SNAPSHOT] Marker revenu à l'initiateur (%s). Fin de la propagation.", c.SiteID)
 			return nil
 		}
@@ -126,7 +126,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// Si on reçoit rouge alors qu'on est blanc on peut notre instantané avant de traiter le message.
-	if pMsg.Color == "rouge" && c.Snapshot.MyColor == "blanc" {
+	if pMsg.Color == string(snapshot.Red) && c.Snapshot.MyColor == snapshot.White {
 		log.Printf("[SNAPSHOT] Lestage détecté (Msg ROUGE sur Site BLANC). Clic forcé.")
 		msgSnapshot := c.triggerLocalSnapshot(false)
 		if msgSnapshot != "" {
@@ -135,7 +135,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// Détection des messages Prépost : Envoyé blanc, reçu rouge
-	if pMsg.Color == "blanc" && c.Snapshot.MyColor == "rouge" && isApplicationMessage(pMsg.Action) {
+	if pMsg.Color == string(snapshot.White) && c.Snapshot.MyColor == snapshot.Red && isApplicationMessage(pMsg.Action) {
 		log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
 		// On crée un message de contrôle pour envoyer ce contenu à l'initiateur
 		prepostMsg := c.formatPrepostForInitiator(pMsg)
@@ -156,7 +156,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		returnMsg = c.handleDistributedFile(pMsg)
 
 	// snapshot
-	case "MARKER", "PREPOST_COLLECT", "STATE_COLLECT", "RESET_SNAPSHOT":
+	case snapshot.MARKER, snapshot.PREPOST_COLLECT, snapshot.STATE_COLLECT, snapshot.RESET_SNAPSHOT:
 		log.Printf("[CONTROLLER] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
 
