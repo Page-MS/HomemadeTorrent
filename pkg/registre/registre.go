@@ -145,11 +145,21 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 // - a pointer to the file if it is found in the register, nil otherwise
 func (r *Registre) GetFileByID(fileID string) *file {
 	for i, file := range r.files {
+		fmt.Print(file.ID + "    " + fileID)
 		if file.ID == fileID {
 			return &r.files[i]
 		}
 	}
 	fmt.Printf("File with ID %s not found\n", fileID)
+	return nil
+}
+
+func (r *Registre) GetFileByName(fileName string) *file {
+	for i, file := range r.files {
+		if file.name == fileName {
+			return &r.files[i]
+		}
+	}
 	return nil
 }
 
@@ -212,7 +222,7 @@ func initialisationFileCopy(fileInfos file, siteID string) {
 		}
 	}
 
-	err = os.WriteFile("bin/"+siteID+"/"+"fullFiles"+siteID+"_"+fileInfos.name, filecontent, 0644)
+	err = os.WriteFile("bin/"+siteID+"/"+fileInfos.name, filecontent, 0644)
 	if err != nil {
 		fmt.Printf("Error writing file: %v\n", err)
 		return
@@ -266,7 +276,7 @@ func (r *Registre) GetFilePart(fileID string, partID uint) *filePart {
 }
 
 // Print the register for debug purposes
-func (r *Registre) PrintRegister() {
+func (r *Registre) DetailedPrintRegister() {
 	if len(r.files) == 0 {
 		fmt.Printf("No files in the register\n")
 		return
@@ -285,12 +295,70 @@ func (r *Registre) PrintRegister() {
 	}
 }
 
+// Print the register for debug purposes
+func (r *Registre) PrintRegister() {
+	if len(r.files) == 0 {
+		fmt.Printf("No files in the register\n")
+		return
+	}
+	for _, file := range r.files {
+		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.name, file.ID, file.size, file.numberOfParts)
+		for _, peer := range file.peersThatHaveFileID {
+			fmt.Printf("\tPeer that has the file: %s\n", peer)
+		}
+	}
+}
+
 // Create an empty register
 func NewRegistre() *Registre {
 	return &Registre{
 		files: []file{},
 		peers: []string{},
 	}
+}
+
+// Reassemble a file from its parts and save it in the specified path
+//
+// Parameters:
+// - fileID: the ID of the file to reassemble
+// - source: the path of the directory containing the file parts
+// - destination: the path of the directory where the reassembled file will be created
+// - registre: the register containing the file parts information
+//
+// Returns:
+// - an error if something went wrong, nil otherwise
+func ReassembleFileFromParts(fileID string, source string, destination string, registre *Registre) error {
+	file := registre.GetFileByName(fileID)
+	if file == nil {
+		return fmt.Errorf("file with ID %s not found in register", fileID)
+	}
+	// We create the folder if it doesn't exist
+	if _, err := os.Stat(destination); os.IsNotExist(err) {
+		err = os.Mkdir(destination, 0755)
+		if err != nil {
+			return fmt.Errorf("could not create destination folder: %v", err)
+		}
+	}
+	outputFile, err := os.Create(destination + "/" + file.name)
+	if err != nil {
+		return fmt.Errorf("could not create output file: %v", err)
+	}
+	defer outputFile.Close()
+	// We use a buffer to write each parts in the output file
+	// The parts are in the parts subfolder and are named following the convention fileName_partX
+	for i := uint(0); i < file.numberOfParts; i++ {
+		partFilePath := fmt.Sprintf(source+"/%s_part%d", file.name[:strings.LastIndex(file.name, ".")], i)
+		partFileContent, err := os.ReadFile(partFilePath)
+		if err != nil {
+			return fmt.Errorf("could not read file part: %v", err)
+		}
+		_, err = outputFile.Write(partFileContent)
+		if err != nil {
+			return fmt.Errorf("could not write to output file: %v", err)
+		}
+	}
+
+	return nil
 }
 
 // Initialize and return the initial hardcoded register
@@ -358,7 +426,7 @@ func InitialiseRegistre(currentSiteID string, registre *Registre) {
 	// We copy the files that the site should have at the beginning of the execution of the program based on the precreated common register from the fullFiles folder to the site folder
 	for _, file := range filesToHave {
 		initialisationFileCopy(file, currentSiteID)
-		SplitFile("bin/"+currentSiteID+"/"+"fullFiles"+currentSiteID+"_"+file.name, "bin/"+currentSiteID+"/parts")
+		SplitFile("bin/"+currentSiteID+"/"+file.name, "bin/"+currentSiteID+"/parts")
 	}
 
 }
