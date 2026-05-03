@@ -3,6 +3,7 @@ package torrentlogic
 import (
 	"HomemadeTorrent/pkg/registre"
 	"fmt"
+	"sync"
 )
 
 type PartTransferStatus int
@@ -67,10 +68,30 @@ func StartTransfer(fileID string, currentSite string, registre *registre.Registr
 		numberOfPartsCompleted: 0,
 		receiving:              true,
 	}
+	// chanel for communication between the transfers goroutine
+	transfersResultsChanels := make(chan int)
+	// WaitGroup for synchronizing the transfers goroutines
+	var wg sync.WaitGroup
+
 	for i := uint(0); i < file.NumberOfParts; i++ {
 		transfer.partsToAskIDs[i] = i
+		go StartTransferForPart(fileID, i, currentSite, registre)
+		wg.Add(1)
 	}
 	PrintTransferStatus(transfer)
+	go func() {
+		for n := range transfersResultsChanels {
+			transfer.partsCompletedIDs = append(transfer.partsCompletedIDs, uint(n))
+			transfer.numberOfPartsCompleted++
+		}
+	}()
+	wg.Wait()
+	if len(transfer.partsToAskIDs) == 0 && len(transfer.partsCompletedIDs) == int(file.NumberOfParts) {
+		fmt.Printf("\nTransfer for file %s completed successfully !", file.Name)
+	} else {
+		fmt.Printf("\nTransfer for file %s completed with errors, parts not received: %v", file.Name, transfer.partsToAskIDs)
+		return false, nil
+	}
 	return true, nil
 }
 
@@ -79,4 +100,10 @@ func PrintTransferStatus(transfer *ongoingTransfer) {
 	for _, partTransfer := range transfer.partTransfers {
 		fmt.Printf("Part %d: %s (peer: %s)\n", partTransfer.partID, stateName[partTransfer.state], partTransfer.peerID)
 	}
+}
+
+func StartTransferForPart(fileID string, partID uint, currentSite string, registre *registre.Registre) (err error) {
+	fmt.Printf("Starting transfer for part %d", partID)
+	return err
+
 }
