@@ -2,6 +2,7 @@ package parser
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -12,6 +13,7 @@ func TestDecode(t *testing.T) {
 		t.Errorf("Should not have errored: %s", err)
 		return
 	}
+
 	if msg.Action != "bijour" {
 		t.Errorf("ACTION value should be 'bijour', found %s", msg.Action)
 		return
@@ -29,16 +31,16 @@ func TestDecode(t *testing.T) {
 		return
 	}
 	if msg.Stamp != 123 {
-		t.Errorf("STAMP value should be '123', found %d", msg.Stamp)
+		t.Errorf("STAMP value should be 123, found %d", msg.Stamp)
 		return
 	}
 	if slices.Compare(msg.Vect, []int{123, 111, 333}) != 0 {
-		t.Errorf("STAMP value should be [123 111 333], found %d", msg.Vect)
+		t.Errorf("VECT value should be [123 111 333], found %v", msg.Vect)
 		return
 	}
 
 	// payload case
-	msg, err = Decode("ACTION:bijour\nID:bijour_id\nPAYLOAD_LEN:5\nbijour")
+	msg, err = Decode("ACTION:bijour\nID:bijour_id\nPAYLOAD_LEN:6\nbijour\n")
 	if err != nil {
 		t.Errorf("Should not have errored: %s", err)
 		return
@@ -51,8 +53,8 @@ func TestDecode(t *testing.T) {
 		t.Errorf("ID value should be 'bijour_id', found %s", msg.Id)
 		return
 	}
-	if msg.payload_len != 5 {
-		t.Errorf("Payload_len value should be '5', found %d", msg.payload_len)
+	if msg.Payload_len != 6 {
+		t.Errorf("Payload_len value should be 6, found %d", msg.Payload_len)
 		return
 	}
 	if msg.Payload != "bijour" {
@@ -60,16 +62,38 @@ func TestDecode(t *testing.T) {
 		return
 	}
 
+	// color + bilan + object case
+	msg, err = Decode(
+		"ACTION:test\nID:1\nDEST:0\nSENDER:1\nSTAMP:1\nVECT:1,2\nCOLOR:red\nBILAN:42\nOBJECT:obj",
+	)
+	if err != nil {
+		t.Errorf("Should not have errored: %s", err)
+		return
+	}
+
+	if msg.Color != "red" {
+		t.Errorf("COLOR should be 'red', found %s", msg.Color)
+		return
+	}
+	if msg.Bilan != 42 {
+		t.Errorf("BILAN should be 42, found %d", msg.Bilan)
+		return
+	}
+	if msg.Object != "obj" {
+		t.Errorf("OBJECT should be 'obj', found %s", msg.Object)
+		return
+	}
+
 	// error case
 	msg, err = Decode("ACTIONbijour\nID:bijour_id\nPAYLOAD_LEN:5\nbijour")
 	if err == nil {
-		t.Errorf("Should have errored but not")
+		t.Errorf("Should have errored but did not")
 		return
 	}
 }
 
 func TestEncode(t *testing.T) {
-	// no action/chunk/payload
+	// minimal case
 	str, err := Encode(Message{
 		Action: "bijour",
 		Id:     "je-suis-un-uuid",
@@ -81,37 +105,43 @@ func TestEncode(t *testing.T) {
 		t.Errorf("Should not have errored: %s", err)
 		return
 	}
-	res := "ACTION:bijour\nID:je-suis-un-uuid\nDEST:0\nSENDER:0\nSTAMP:0\nVECT:"
+
+	res := "ACTION:bijour\nID:je-suis-un-uuid\nDEST:0\nSENDER:0\nSTAMP:0\nVECT:\n"
 	if str != res {
-		t.Errorf("Encode operation should have produced '%s', but found %s", res, str)
+		t.Errorf("Encode should have produced:\n%s\nbut got:\n%s", res, str)
 	}
 
-	// error
-	str, err = Encode(Message{
+	// error: missing action
+	_, err = Encode(Message{
 		Action: "",
-		Id:     "je-suis-un-uuid",
+		Id:     "uuid",
 		Chunk:  -1,
 		Dest:   "0",
 		Sender: "0",
 	})
-	if err == nil { // missing action
-		t.Errorf("Should have errored but not")
+	if err == nil {
+		t.Errorf("Should have errored but did not")
 		return
 	}
 
-	// generating uuid
+	// uuid generation + chunk filtering + payload
 	str, err = Encode(Message{
-		Action: "action",
-		Chunk:  -1,
-		Dest:   "0",
-		Sender: "0",
+		Action:  "action",
+		Chunk:   0,
+		Dest:    "0",
+		Sender:  "0",
+		Payload: "hello",
 	})
-	if err != nil { // missing action
-		t.Errorf("Should not have errored, but found %s", err)
+	if err != nil {
+		t.Errorf("Should not have errored: %s", err)
 		return
 	}
 
-	// encode stamp & vecto
+	if !strings.Contains(str, "ACTION:action") {
+		t.Errorf("Missing ACTION in output")
+	}
+
+	// full message test (all fields)
 	str, err = Encode(Message{
 		Action: "test",
 		Id:     "superId",
@@ -119,13 +149,17 @@ func TestEncode(t *testing.T) {
 		Sender: "13",
 		Vect:   []int{111, 333},
 		Stamp:  111,
+		Color:  "blue",
+		Bilan:  7,
+		Object: "obj",
 	})
-	if err != nil { // missing action
-		t.Errorf("Should not have errored, but found %s", err)
+	if err != nil {
+		t.Errorf("Should not have errored: %s", err)
 		return
 	}
-	res = "ACTION:test\nID:superId\nDEST:0\nSENDER:13\nSTAMP:111\nVECT:111,333\nCHUNK:0"
-	if str != res {
-		t.Errorf("Encode operation should have produced '%s'\n, but found %s", res, str)
+
+	expected := "ACTION:test\nID:superId\nDEST:0\nSENDER:13\nSTAMP:111\nVECT:111,333\nCHUNK:0\nOBJECT:obj\nCOLOR:blue\nBILAN:7\n"
+	if str != expected {
+		t.Errorf("Encode mismatch:\nEXPECTED:\n%s\nGOT:\n%s", expected, str)
 	}
 }
