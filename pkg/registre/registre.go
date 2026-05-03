@@ -15,10 +15,11 @@ import (
 const FILE_PART_SIZE uint = 16 * 1024
 
 type filePart struct {
-	parentFileID   string
-	filePartID     uint
-	filePartSize   uint
-	filePartShasum string
+	parentFileID            string
+	filePartID              uint
+	filePartSize            uint
+	filePartShasum          string
+	peersThatHaveFilePartID []string
 }
 
 type file struct {
@@ -277,6 +278,9 @@ func (r *Registre) PrintRegister() {
 		}
 		for _, part := range file.fileParts {
 			fmt.Printf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.filePartID, part.filePartSize, part.filePartShasum)
+			for _, peer := range part.peersThatHaveFilePartID {
+				fmt.Printf("\tPeer that has the file part: %s\n", peer)
+			}
 		}
 	}
 }
@@ -305,12 +309,24 @@ func MakeInitialHardcodedRegister(registre *Registre, sourcePath string, destina
 	for i := range registre.GetFileList() {
 		if i%4 == 0 {
 			registre.files[i].peersThatHaveFileID = []string{"Mathy", "Alexis"}
+			for part := range registre.files[i].fileParts {
+				registre.files[i].fileParts[part].peersThatHaveFilePartID = []string{"Mathy", "Alexis"}
+			}
 		} else if i%4 == 1 {
 			registre.files[i].peersThatHaveFileID = []string{"Noah", "Page"}
+			for part := range registre.files[i].fileParts {
+				registre.files[i].fileParts[part].peersThatHaveFilePartID = []string{"Noah", "Page"}
+			}
 		} else if i%4 == 2 {
 			registre.files[i].peersThatHaveFileID = []string{"Mathy", "Noah"}
+			for part := range registre.files[i].fileParts {
+				registre.files[i].fileParts[part].peersThatHaveFilePartID = []string{"Mathy", "Noah"}
+			}
 		} else {
 			registre.files[i].peersThatHaveFileID = []string{"Alexis", "Page"}
+			for part := range registre.files[i].fileParts {
+				registre.files[i].fileParts[part].peersThatHaveFilePartID = []string{"Alexis", "Page"}
+			}
 		}
 	}
 
