@@ -105,15 +105,18 @@ func Decode(raw_data string) (Message, error) {
 			}
 
 		case "VECT":
-			{
-				msg.Vect = make([]int, 0)
-				for _, val := range strings.Split(value, ",") {
-					nb, err := strconv.Atoi(strings.TrimSpace(val))
-					if err != nil {
-						return Message{}, errors.New("Impossible to convert VECT value")
-					}
-					msg.Vect = append(msg.Vect, nb)
+			msg.Vect = make([]int, 0)
+			for _, val := range strings.Split(value, ",") {
+				trimmed := strings.TrimSpace(val)
+				if trimmed == "" {
+					continue
 				}
+				nb, err := strconv.Atoi(trimmed)
+				if err != nil {
+					log.Printf("[PARSER] Warning: Vect conversion failed for '%s'", trimmed)
+					continue
+				}
+				msg.Vect = append(msg.Vect, nb)
 			}
 
 		case "PAYLOAD_LEN":
@@ -197,7 +200,7 @@ func Encode(msg Message) (string, error) {
 		data = append(data, "COLOR:"+msg.Color)
 	}
 
-	if msg.Action == "STATE_COLLECT" {
+	if msg.Bilan != 0 || msg.Action == "STATE_COLLECT" {
 		data = append(data, "BILAN:"+strconv.Itoa(msg.Bilan))
 	}
 	return strings.Join(data, "\n") + "\n", nil

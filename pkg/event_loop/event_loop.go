@@ -55,42 +55,46 @@ func Start(allSiteIDs []string, siteID string) {
 
 		switch event.Type {
 		case ReadMessage:
+			//fmt.Println("[DEBUG] EventLoop: Message reçu, envoi vers processingChan")
 			// Passer le message à la go-routine contenant la logique du site
 			processingChan <- event
 
 		case WriteMessage:
+			//fmt.Println("[DEBUG] EventLoop: Demande d'écriture détectée !")
 			write(event.Data)
 		}
 	}
 }
 
 func listenStdEntry(queue chan<- Event) {
-	reader := bufio.NewReader(os.Stdin)
+	//fmt.Println("DEBUG: Le lecteur clavier est bien lancé")
+	scanner := bufio.NewScanner(os.Stdin)
 	var buffer strings.Builder
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			log.Println("[EVENT_LOOP] Lecture impossible, entrée ignorée")
-			continue
-		}
-
+	for scanner.Scan() {
+		line := scanner.Text()
 		if strings.TrimSpace(line) == "" {
-			// fin de message
-			msg := buffer.String()
-			buffer.Reset()
+			//fmt.Println(">>> LIGNE VIDE DÉTECTÉE, ENVOI DANS LA QUEUE")
+			// Si on a déjà accumulé des données, on traite le message
+			if buffer.Len() > 0 {
+				msg := buffer.String()
+				buffer.Reset()
 
-			log.Printf("[EVENT_LOOP] Message lu en entrée: %s\n", msg)
+				log.Printf("[EVENT_LOOP] Message lu en entrée: %s\n", msg)
 
-			queue <- Event{
-				Type:   ReadMessage,
-				Source: FromNetwork,
-				Data:   msg,
+				queue <- Event{
+					Type:   ReadMessage,
+					Source: FromNetwork,
+					Data:   msg,
+				}
 			}
 			continue
 		}
+		// On rajoute un \n manuellement pour reconstruire le message proprement
+		buffer.WriteString(line + "\n")
+	}
 
-		buffer.WriteString(line)
+	if err := scanner.Err(); err != nil {
+		log.Println("[EVENT_LOOP] Erreur de lecture Stdin:", err)
 	}
 }
 
@@ -105,31 +109,37 @@ func listenUserInput(userInputChan <-chan string, queue chan<- Event) {
 }
 
 func write(msg string) {
-	log.Println("[EVENT_LOOP] Message ecrit en sortie:", msg)
-	_, err := fmt.Fprintf(os.Stdout, msg+"\n")
+	log.Println("[EVENT_LOOP] Message écrit en sortie:", msg)
+	_, err := fmt.Fprintf(os.Stdout, msg+"\n\n")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Erreur écriture stdout: %v\n", err)
 	}
 }
 
 func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controller) {
-	for msg := range input {
+	for event := range input {
+		// Découpage par double saut de ligne pour séparer les messages collés
+		rawMessages := strings.Split(event.Data, "\n\n")
 
-		var responses []string
+		for _, raw := range rawMessages {
+			cleanRaw := strings.TrimSpace(raw)
+			if cleanRaw == "" {
+				continue
+			}
 
-		switch msg.Source {
+			var responses []string
+			switch event.Source {
+			case FromNetwork:
+				responses = c.HandleIncomingFromNetwork(cleanRaw)
+			case FromLocalUser:
+				responses = c.HandleIncomingFromLocal(cleanRaw)
+			}
 
-		case FromNetwork:
-			responses = c.HandleIncomingFromNetwork(msg.Data)
-
-		case FromLocalUser:
-			responses = c.HandleIncomingFromLocal(msg.Data)
-		}
-
-		for _, r := range responses {
-			eventQueue <- Event{
-				Type: WriteMessage,
-				Data: r,
+			for _, r := range responses {
+				eventQueue <- Event{
+					Type: WriteMessage,
+					Data: r,
+				}
 			}
 		}
 	}

@@ -1,6 +1,9 @@
 package clock
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
 type VectorClock struct {
 	vector    []int
@@ -28,6 +31,12 @@ func (vc *VectorClock) Update(remoteVector []int) {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
 
+	log.Printf("[DEBUG-VECT] RECEPTION - Avant Update: %v | Remote reçu: %v | MonIndex: %d", vc.vector, remoteVector, vc.siteIndex)
+
+	if len(remoteVector) != len(vc.vector) {
+		log.Printf("[DEBUG-VECT] WARNING : Taille incohérente ! Local=%d, Remote=%d", len(vc.vector), len(remoteVector))
+	}
+
 	// Verification de la taille des vecteurs
 	for i := range vc.vector {
 		if remoteVector[i] > vc.vector[i] {
@@ -36,6 +45,8 @@ func (vc *VectorClock) Update(remoteVector []int) {
 	}
 	// On incrémente aussi notre propre case
 	vc.vector[vc.siteIndex]++
+
+	log.Printf("[DEBUG-VECT] RECEPTION - Après Update: %v", vc.vector)
 }
 
 // GetCopy retourne une copie du vecteur actuel (pour l'envoyer dans un message)

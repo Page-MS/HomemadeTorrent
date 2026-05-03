@@ -2,8 +2,11 @@ package control
 
 import (
 	"HomemadeTorrent/pkg/parser"
+	"HomemadeTorrent/pkg/registre"
 	"HomemadeTorrent/pkg/snapshot"
 	"log"
+
+	"github.com/google/uuid"
 )
 
 // triggerLocalSnapshot effectue l'action de "clic"
@@ -13,7 +16,12 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool) string {
 	c.Snapshot.IsInitiator = isInitiator
 
 	// Sauvegarde de l'état local -> copie du registre pour que la snapshot ne change plus
-	c.Snapshot.SavedRegister = *c.Reg
+	if c.Reg != nil {
+		c.Snapshot.SavedRegister = *c.Reg
+	} else {
+		log.Printf("[WARNING] Registre inexistant lors du snapshot !")
+		c.Snapshot.SavedRegister = registre.Registre{}
+	}
 
 	// datation avec horloge vectorielle
 	c.Snapshot.SavedVector = c.Vector.GetCopy()
@@ -38,11 +46,14 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool) string {
 func (c *Controller) formatPrepostForInitiator(pMsg parser.Message) string {
 	// Un message prépost est un message envoyé blanc reçu rouge
 	prepost := parser.Message{
+		Id:      uuid.New().String(),
 		Action:  "PREPOST_COLLECT",
 		Sender:  c.SiteID,
-		Dest:    c.getIdFromSIteIndex(c.getSuccessorIndex()), // forward sur l'anneau
-		Payload: pMsg.Action,                                 // contenu du message d'origine
-		Color:   string(snapshot.Red),                        // message de controles sont rouges
+		Dest:    c.getIdFromSIteIndex(c.getSuccessorIndex()),                     // forward sur l'anneau
+		Payload: pMsg.Sender + " a envoyé " + pMsg.Action + " : " + pMsg.Payload, // contenu du message d'origine
+		Color:   string(snapshot.Red),                                            // message de controles sont rouges
+		Stamp:   c.Lamport.GetValue(),
+		Vect:    c.Vector.GetCopy(),
 	}
 
 	res, err := parser.Encode(prepost)
@@ -55,12 +66,17 @@ func (c *Controller) formatPrepostForInitiator(pMsg parser.Message) string {
 
 // sendStateOnRing envoie l'état local et le bilan au successeur
 func (c *Controller) sendStateOnRing() string {
+	log.Printf("[DEBUG-SEND] Mon bilan actuel au moment de l'envoi : %d", c.Snapshot.Bilan)
 	stateMsg := parser.Message{
-		Action: "STATE_COLLECT",
-		Sender: c.SiteID,
-		Dest:   c.getIdFromSIteIndex(c.getSuccessorIndex()),
-		Bilan:  c.Snapshot.Bilan, // transmet notre bilan à l'initiateur
-		Color:  string(snapshot.Red),
+		Id:      uuid.New().String(),
+		Action:  "STATE_COLLECT",
+		Sender:  c.SiteID,
+		Stamp:   c.Lamport.GetValue(),
+		Vect:    c.Vector.GetCopy(),
+		Dest:    c.getIdFromSIteIndex(c.getSuccessorIndex()),
+		Bilan:   c.Snapshot.Bilan, // transmet notre bilan à l'initiateur
+		Color:   string(snapshot.Red),
+		Payload: "Registre Site " + c.SiteID,
 		// TODO : serialiser le registre dans le payload
 	}
 
@@ -86,7 +102,7 @@ func isApplicationMessage(action string) bool {
 }
 
 // finalizeSnapshot conclut l'algorithme de lestage
-func (c *Controller) finalizeSnapshot() {
+func (c *Controller) finalizeSnapshot() parser.Message {
 	log.Printf("[SNAPSHOT] TERMINAISON : État global cohérent reconstitué sur %s !", c.SiteID)
 	log.Printf("[SNAPSHOT] Heure vectorielle de la sauvegarde : %v", c.Snapshot.SavedVector)
 
@@ -98,6 +114,16 @@ func (c *Controller) finalizeSnapshot() {
 	c.Snapshot.NbEtatsAttendus = 0
 	c.Snapshot.NbMsgAttendus = 0
 
-	// TODO : sauvegarder c.Snapshot.CollectedStates dans un fichier JSON par exemple
+	// TODO : sauvegarder c.Snapshot.CollectedStates et c.Snapshot.CollectedPreposts dans un fichier JSON par exemple
+
+	resetMsg := parser.Message{
+		Action: "RESET_SNAPSHOT",
+		Id:     uuid.New().String(),
+		Sender: c.SiteID,
+		Stamp:  c.Lamport.GetValue(),
+		Vect:   c.Vector.GetCopy(),
+		Dest:   c.getIdFromSIteIndex(c.getSuccessorIndex()),
+	}
 	log.Println("[SNAPSHOT] Système prêt pour une nouvelle sauvegarde.")
+	return resetMsg
 }

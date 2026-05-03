@@ -1,6 +1,7 @@
 package control
 
 import (
+	"HomemadeTorrent/pkg/snapshot"
 	"log"
 
 	"HomemadeTorrent/pkg/distributed_file"
@@ -42,8 +43,39 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 }
 
 func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
+
+	if pMsg.Action == "RESET_SNAPSHOT" {
+		if c.Snapshot.MyColor == snapshot.White {
+			log.Printf("[SNAPSHOT] Reset reçu mais site déjà BLANC. Fin de boucle.")
+			return parser.Message{Action: ""}
+		}
+
+		c.Snapshot.MyColor = snapshot.White
+		c.Snapshot.IsInitiator = false
+		log.Printf("[SNAPSHOT] Reset reçu de %s : Retour au BLANC.", pMsg.Sender)
+
+		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+		pMsg.Vect = c.Vector.GetCopy()
+		pMsg.Stamp = c.Lamport.GetValue()
+		return pMsg
+	}
+
+	// Si on reçoit un MARKER et qu'on est blanc, on devient initiateur
+	if pMsg.Action == "MARKER" && c.Snapshot.MyColor == snapshot.White {
+		log.Printf("[SNAPSHOT] Déclenchement initié par MARKER réseau.")
+		c.triggerLocalSnapshot(true)
+		pMsg.Sender = c.SiteID
+		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+		pMsg.Color = "rouge"
+		pMsg.Vect = c.Vector.GetCopy()
+		pMsg.Stamp = c.Lamport.GetValue()
+		return pMsg
+	}
+
 	if !c.Snapshot.IsInitiator {
 		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+		pMsg.Vect = c.Vector.GetCopy()
+		pMsg.Stamp = c.Lamport.GetValue()
 		return pMsg
 	}
 
@@ -51,15 +83,25 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 	case "STATE_COLLECT":
 		c.Snapshot.NbEtatsAttendus--
 		c.Snapshot.NbMsgAttendus += pMsg.Bilan
-		// c.Snapshot.CollectedStates = append(...)
+		// TODO : c.Snapshot.CollectedStates = append(registre serialiser dans payload)
+		log.Printf("[SNAPSHOT] État reçu de %s (Bilan: %d). Attente de %d messages restants.", pMsg.Sender, pMsg.Bilan, c.Snapshot.NbMsgAttendus)
 
 	case "PREPOST_COLLECT":
-		c.Snapshot.NbMsgAttendus--
+		if c.Snapshot.NbEtatsAttendus > 0 || c.Snapshot.NbMsgAttendus > 0 {
+			c.Snapshot.NbMsgAttendus--
+			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, pMsg.Payload)
+			log.Printf("[SNAPSHOT] Message en vol archivé. Restant : %d", c.Snapshot.NbMsgAttendus)
+
+		} else {
+			log.Printf("[SNAPSHOT] Prepost reçu hors session, ignoré.")
+		}
+		return parser.Message{Action: ""}
 	}
 
 	// terminaison
 	if c.Snapshot.NbEtatsAttendus == 0 && c.Snapshot.NbMsgAttendus == 0 {
-		c.finalizeSnapshot()
+		resetMsg := c.finalizeSnapshot()
+		return resetMsg
 	}
 
 	return parser.Message{}

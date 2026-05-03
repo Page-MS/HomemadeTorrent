@@ -75,18 +75,28 @@ func NewSiteDirectory(siteIDs []string) SiteDirectory {
 func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	var responses []string
 
+	log.Printf("[DEBUG-CTRL] Tentative de décodage de : \n%s\n", raw)
 	// -------------- Decodage ------------------
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
-		log.Printf("[CONTROLLER] Erreur décodage message: %v\n", err)
+		log.Printf("[DEBUG-CTRL] ERREUR DÉCODAGE : %v\n", err)
 		return responses
 	}
 
 	log.Printf("[CONTROLLER] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
 
+	//if isApplicationMessage(pMsg.Action) && c.Snapshot.MyColor == snapshot.White {
+	//	log.Printf("[TEST] Bilan++ anticipé sur %s", pMsg.Action)
+	//	c.Snapshot.Bilan++
+	//}
+
 	// -------------- Routage ------------------------
 	// Eviter la duplication des messages causé par BROADCAST
 	if c.SeenMessages[pMsg.Id] {
+		if pMsg.Action == "MARKER" && c.Snapshot.IsInitiator {
+			log.Printf("[SNAPSHOT] Marker revenu à l'initiateur (%s). Fin de la propagation.", c.SiteID)
+			return nil
+		}
 		log.Printf("[ROUTAGE] Message déjà vu (%s), ignoré", pMsg.Id)
 		return responses
 	}
@@ -97,8 +107,13 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, raw)
 	}
 	if !processLocal {
-
 		return responses
+	}
+
+	// ------------- synchro des horloges ------------
+	c.Lamport.Update(pMsg.Stamp)
+	if len(pMsg.Vect) > 0 {
+		c.Vector.Update(pMsg.Vect)
 	}
 
 	// ------------- Logique Snapshot --------------
@@ -106,6 +121,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	// Chaque réception diminue le bilan local.
 	// On ne décrémente le bilan que pour les messages torrent pas pour les autres messages
 	if isApplicationMessage(pMsg.Action) {
+		log.Printf("[SNAPSHOT] Message applicatif reçu pour traitement local. Bilan--")
 		c.Snapshot.Bilan--
 	}
 
@@ -119,7 +135,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// Détection des messages Prépost : Envoyé blanc, reçu rouge
-	if pMsg.Color == "blanc" && c.Snapshot.MyColor == "rouge" {
+	if pMsg.Color == "blanc" && c.Snapshot.MyColor == "rouge" && isApplicationMessage(pMsg.Action) {
 		log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
 		// On crée un message de contrôle pour envoyer ce contenu à l'initiateur
 		prepostMsg := c.formatPrepostForInitiator(pMsg)
@@ -127,11 +143,6 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// ------------- Logique controler --------------
-	// synchro des horloges
-	c.Lamport.Update(pMsg.Stamp)
-	if len(pMsg.Vect) > 0 {
-		c.Vector.Update(pMsg.Vect)
-	}
 
 	log.Printf("[CONTROLLER] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
 
@@ -145,8 +156,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		returnMsg = c.handleDistributedFile(pMsg)
 
 	// snapshot
-	// TODO: Remplacer par les constantes des actions de sauvegarde
-	case "MARKER", "PREPOST_COLLECT", "SAVE_COLLECT":
+	case "MARKER", "PREPOST_COLLECT", "STATE_COLLECT", "RESET_SNAPSHOT":
 		log.Printf("[CONTROLLER] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
 

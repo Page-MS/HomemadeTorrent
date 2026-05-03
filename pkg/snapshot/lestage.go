@@ -18,9 +18,10 @@ type Snapshot struct {
 	SavedRegister registre.Registre
 	SavedVector   []int // datation
 
-	NbEtatsAttendus int
-	NbMsgAttendus   int
-	CollectedStates []registre.Registre
+	NbEtatsAttendus   int
+	NbMsgAttendus     int
+	CollectedStates   []registre.Registre
+	CollectedPreposts []string
 }
 
 func (s *Snapshot) SetRed() {
