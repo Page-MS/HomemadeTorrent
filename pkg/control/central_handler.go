@@ -91,18 +91,21 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	//}
 
 	// -------------- Routage ------------------------
-	// Eviter la duplication des messages causé par BROADCAST
-	if c.SeenMessages[pMsg.Id] {
-		if pMsg.Action == snapshot.MARKER && c.Snapshot.IsInitiator {
+	processLocal, forward := c.routeMessage(pMsg)
+
+	if processLocal && c.SeenMessages[pMsg.Id] {
+		if pMsg.Action == "MARKER" && c.Snapshot.IsInitiator {
 			log.Printf("[SNAPSHOT] Marker revenu à l'initiateur (%s). Fin de la propagation.", c.SiteID)
 			return nil
 		}
-		log.Printf("[ROUTAGE] Message déjà vu (%s), ignoré", pMsg.Id)
+		log.Printf("[ROUTAGE] Message déjà traité (%s), ignoré", pMsg.Id)
 		return responses
 	}
-	c.SeenMessages[pMsg.Id] = true
-	// verifier si le message est pour ce site
-	processLocal, forward := c.routeMessage(pMsg)
+
+	if processLocal {
+		c.SeenMessages[pMsg.Id] = true
+	}
+
 	if forward {
 		responses = append(responses, raw)
 	}
