@@ -32,6 +32,7 @@ type Event struct {
 }
 
 func Start(allSiteIDs []string, siteID string) {
+	// Def des logs
 	logFile, _ := os.Create(siteID + ".log")
 	log.SetOutput(logFile)
 
@@ -55,12 +56,10 @@ func Start(allSiteIDs []string, siteID string) {
 
 		switch event.Type {
 		case ReadMessage:
-			//fmt.Println("[DEBUG] EventLoop: Message reçu, envoi vers processingChan")
 			// Passer le message à la go-routine contenant la logique du site
 			processingChan <- event
 
 		case WriteMessage:
-			//fmt.Println("[DEBUG] EventLoop: Demande d'écriture détectée !")
 			write(event.Data)
 		}
 	}
@@ -73,7 +72,6 @@ func listenStdEntry(queue chan<- Event) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.TrimSpace(line) == "" {
-			//fmt.Println(">>> LIGNE VIDE DÉTECTÉE, ENVOI DANS LA QUEUE")
 			// Si on a déjà accumulé des données, on traite le message
 			if buffer.Len() > 0 {
 				msg := buffer.String()

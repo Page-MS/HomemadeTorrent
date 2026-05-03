@@ -44,7 +44,7 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 
 func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 
-	if pMsg.Action == "RESET_SNAPSHOT" {
+	if pMsg.Action == snapshot.RESET_SNAPSHOT {
 		if c.Snapshot.MyColor == snapshot.White {
 			log.Printf("[SNAPSHOT] Reset reçu mais site déjà BLANC. Fin de boucle.")
 			return parser.Message{Action: ""}
@@ -61,12 +61,12 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 	}
 
 	// Si on reçoit un MARKER et qu'on est blanc, on devient initiateur
-	if pMsg.Action == "MARKER" && c.Snapshot.MyColor == snapshot.White {
+	if pMsg.Action == snapshot.MARKER && c.Snapshot.MyColor == snapshot.White {
 		log.Printf("[SNAPSHOT] Déclenchement initié par MARKER réseau.")
 		c.triggerLocalSnapshot(true)
 		pMsg.Sender = c.SiteID
 		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
-		pMsg.Color = "rouge"
+		pMsg.Color = string(snapshot.Red)
 		pMsg.Vect = c.Vector.GetCopy()
 		pMsg.Stamp = c.Lamport.GetValue()
 		return pMsg
@@ -80,13 +80,13 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 	}
 
 	switch pMsg.Action {
-	case "STATE_COLLECT":
+	case snapshot.STATE_COLLECT:
 		c.Snapshot.NbEtatsAttendus--
 		c.Snapshot.NbMsgAttendus += pMsg.Bilan
 		// TODO : c.Snapshot.CollectedStates = append(registre serialiser dans payload)
 		log.Printf("[SNAPSHOT] État reçu de %s (Bilan: %d). Attente de %d messages restants.", pMsg.Sender, pMsg.Bilan, c.Snapshot.NbMsgAttendus)
 
-	case "PREPOST_COLLECT":
+	case snapshot.PREPOST_COLLECT:
 		if c.Snapshot.NbEtatsAttendus > 0 || c.Snapshot.NbMsgAttendus > 0 {
 			c.Snapshot.NbMsgAttendus--
 			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, pMsg.Payload)
