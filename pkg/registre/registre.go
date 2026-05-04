@@ -145,6 +145,21 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 	return FileParts, nil
 }
 
+func (r *Registre) GetShasumOfPart(fileID string, partID uint) (string, error) {
+	file := r.GetFileByID(fileID)
+	if file == nil {
+		return "", fmt.Errorf("file with ID %s not found", fileID)
+	}
+
+	for _, part := range file.FileParts {
+		if part.filePartID == partID {
+			return part.filePartShasum, nil
+		}
+	}
+
+	return "", fmt.Errorf("part with ID %d not found in file %s", partID, fileID)
+}
+
 // Get the information about a file based on its ID
 //
 // Parameters:

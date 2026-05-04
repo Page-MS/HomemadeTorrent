@@ -255,3 +255,20 @@ func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID 
 
 	return nil
 }
+
+func HandlePeerRespondingWithShasum(currentSiteID string, peerID string, fileID string, partID uint, shasum string, reg *registre.Registre) (err error) {
+	fmt.Printf("\nPeer %s is responding with shasum for part %d of file %s: %s", peerID, partID, fileID, shasum)
+	// We check if the shasum is correct by comparing it with the shasum of the part we have in in the register
+	// We get the file name
+	shasumFromRegister, err := reg.GetShasumOfPart(fileID, partID)
+	if err != nil {
+		return fmt.Errorf("could not get shasum of part %d of file %s from register: %v", partID, fileID, err)
+	}
+	fmt.Printf("\nShasum from register for part %d of file %s: %s", partID, fileID, shasumFromRegister)
+
+	if shasumFromRegister != shasum {
+		return fmt.Errorf("shasum calculated %s does not match shasum received %s for part %d of file %s", shasumFromRegister, shasum, partID, fileID)
+	}
+	fmt.Printf("\nShasum for part %d of file %s is correct", partID, fileID)
+	return nil
+}
