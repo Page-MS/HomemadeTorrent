@@ -33,8 +33,8 @@ type Event struct {
 
 func Start(allSiteIDs []string, siteID string) {
 	// Def des logs
-	logFile, _ := os.Create(siteID + ".log")
-	log.SetOutput(logFile)
+	//logFile, _ := os.Create(siteID + ".log")
+	//log.SetOutput(logFile)
 
 	// Channels
 	eventQueue := make(chan Event, 100)
