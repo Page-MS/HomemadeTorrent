@@ -51,14 +51,14 @@ type ongoingTransfer struct {
 
 // Main function to start a transfer
 // It will then autonomously handle it until it's finished
-func StartTransfer(fileID string, currentSite string, registre *registre.Registre) (success bool, error error) {
+func StartTransfer(fileID string, currentSite string, reg *registre.Registre) (success bool, error error) {
 	fmt.Print("\nStarting transfer for file ID: ", fileID)
-	file := registre.GetFileByID(fileID)
+	file := reg.GetFileByID(fileID)
 	if file == nil {
 		return false, fmt.Errorf("file with ID %s not found in register", fileID)
 	}
 	// We check that the current site is in the register
-	if !registre.IsPeerInRegister(currentSite) {
+	if !reg.IsPeerInRegister(currentSite) {
 		return false, fmt.Errorf("current site %s not found in register", currentSite)
 	}
 	transfer := &ongoingTransfer{
@@ -68,23 +68,31 @@ func StartTransfer(fileID string, currentSite string, registre *registre.Registr
 		numberOfPartsCompleted: 0,
 		receiving:              true,
 	}
-	// chanel for communication between the transfers goroutine
-	transfersResultsChanels := make(chan int)
+	// channel for communication between the transfers goroutine
+	transfersResultsChannel := make(chan int)
 	// WaitGroup for synchronizing the transfers goroutines
 	var wg sync.WaitGroup
 
 	for i := uint(0); i < file.NumberOfParts; i++ {
 		transfer.partsToAskIDs[i] = i
-		go StartTransferForPart(fileID, i, currentSite, registre)
+		go StartTransferForPart(fileID, i, currentSite, reg, transfersResultsChannel, &wg)
 		wg.Add(1)
 	}
 	PrintTransferStatus(transfer)
-	go func() {
-		for n := range transfersResultsChanels {
+	go func(wg *sync.WaitGroup) {
+		wg.Add(1)
+		for n := range transfersResultsChannel {
 			transfer.partsCompletedIDs = append(transfer.partsCompletedIDs, uint(n))
 			transfer.numberOfPartsCompleted++
+			PrintTransferStatus(transfer)
+			transfer.partsToAskIDs = removeElementFromSlice(transfer.partsToAskIDs, uint(n))
+			if transfer.numberOfPartsCompleted == int(file.NumberOfParts) {
+				close(transfersResultsChannel)
+				wg.Done()
+				return
+			}
 		}
-	}()
+	}(&wg)
 	wg.Wait()
 	if len(transfer.partsToAskIDs) == 0 && len(transfer.partsCompletedIDs) == int(file.NumberOfParts) {
 		fmt.Printf("\nTransfer for file %s completed successfully !", file.Name)
@@ -92,9 +100,25 @@ func StartTransfer(fileID string, currentSite string, registre *registre.Registr
 		fmt.Printf("\nTransfer for file %s completed with errors, parts not received: %v", file.Name, transfer.partsToAskIDs)
 		return false, nil
 	}
+	error = registre.ReassembleFileFromParts(file.Name, "bin/"+currentSite+"/parts", "bin/"+currentSite+"/reassembled", reg)
+	if error != nil {
+		fmt.Printf("\nError while reassembling file %s: %v", file.Name, error)
+		return false, error
+	}
+	fmt.Printf("\nFile %s reassembled successfully !", file.Name)
 	return true, nil
 }
 
+func removeElementFromSlice(slice []uint, element uint) []uint {
+	newSlice := make([]uint, 0)
+	for _, e := range slice {
+		if e != element {
+			newSlice = append(newSlice, e)
+		}
+	}
+	return newSlice
+
+}
 func PrintTransferStatus(transfer *ongoingTransfer) {
 	fmt.Printf("\nTransfer status for file %s\n Number of parts to send: %d\n Number of parts completed: %d\n Is receving ? : %t", transfer.file.Name, len(transfer.partsToAskIDs), transfer.numberOfPartsCompleted, transfer.receiving)
 	for _, partTransfer := range transfer.partTransfers {
@@ -102,8 +126,11 @@ func PrintTransferStatus(transfer *ongoingTransfer) {
 	}
 }
 
-func StartTransferForPart(fileID string, partID uint, currentSite string, registre *registre.Registre) (err error) {
-	fmt.Printf("Starting transfer for part %d", partID)
+func StartTransferForPart(fileID string, partID uint, currentSite string, registre *registre.Registre, channelFin chan<- int, wg *sync.WaitGroup) (err error) {
+	fmt.Printf("\nStarting transfer for part %d", partID)
+	channelFin <- int(partID)
+	wg.Done()
+
 	return err
 
 }
