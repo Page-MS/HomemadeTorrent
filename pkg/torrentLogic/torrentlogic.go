@@ -4,6 +4,7 @@ import (
 	"HomemadeTorrent/pkg/registre"
 	"fmt"
 	"math/rand"
+	"os"
 	"sync"
 )
 
@@ -211,10 +212,46 @@ func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID st
 	// We check locally if we can find the part in our local storage
 	// We get the file name
 
-	filepath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "./bin")
+	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "./bin")
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\nFound part file %s", filepath)
+	// We check for the shasum
+	shasum := registre.CalculateShasum(filePath)
+	SendMessageToPeer(peerID, shasum)
+
+	return nil
+}
+
+func SendMessageToPeer(peerID string, message string) {
+	fmt.Printf("\nSending message to peer %s: %s", peerID, message)
+	//TODO
+}
+
+func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID string, partID uint, reg *registre.Registre) (err error) {
+	fmt.Printf("\nPeer %s is asking for the content of part %d of file %s", peerID, partID, fileID)
+	// We check locally if we can find the part in our local storage
+	// We get the file name
+
+	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "./bin")
+	if err != nil {
+		return err
+	}
+	// We get the file content in a string
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("could not open file: %v", err)
+	}
+	defer file.Close()
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("could not get file info: %v", err)
+	}
+	fileSize := uint(fileInfo.Size())
+	filePartContent := make([]byte, fileSize)
+	file.Read(filePartContent)
+	// We send the content of the part to the peer
+	SendMessageToPeer(peerID, string(filePartContent))
+
 	return nil
 }
