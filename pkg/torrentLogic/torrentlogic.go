@@ -3,6 +3,7 @@ package torrentlogic
 import (
 	"HomemadeTorrent/pkg/registre"
 	"fmt"
+	"math/rand"
 	"sync"
 )
 
@@ -61,6 +62,13 @@ func StartTransfer(fileID string, currentSite string, reg *registre.Registre) (s
 	if !reg.IsPeerInRegister(currentSite) {
 		return false, fmt.Errorf("current site %s not found in register", currentSite)
 	}
+	// If we already have the file, we don't need to start the transfer
+	for _, peer := range file.PeersThatHaveFileID {
+		if peer == currentSite {
+			fmt.Printf("\nCurrent site %s already has file %s, no need to start transfer", currentSite, file.Name)
+			return true, nil
+		}
+	}
 	transfer := &ongoingTransfer{
 		file:                   *file,
 		partsToAskIDs:          make([]uint, file.NumberOfParts),
@@ -84,8 +92,7 @@ func StartTransfer(fileID string, currentSite string, reg *registre.Registre) (s
 		for n := range transfersResultsChannel {
 			transfer.partsCompletedIDs = append(transfer.partsCompletedIDs, uint(n))
 			transfer.numberOfPartsCompleted++
-			PrintTransferStatus(transfer)
-			transfer.partsToAskIDs = removeElementFromSlice(transfer.partsToAskIDs, uint(n))
+			transfer.partsToAskIDs = removeElementFromIntSlice(transfer.partsToAskIDs, uint(n))
 			if transfer.numberOfPartsCompleted == int(file.NumberOfParts) {
 				close(transfersResultsChannel)
 				wg.Done()
@@ -109,8 +116,19 @@ func StartTransfer(fileID string, currentSite string, reg *registre.Registre) (s
 	return true, nil
 }
 
-func removeElementFromSlice(slice []uint, element uint) []uint {
+func removeElementFromIntSlice(slice []uint, element uint) []uint {
 	newSlice := make([]uint, 0)
+	for _, e := range slice {
+		if e != element {
+			newSlice = append(newSlice, e)
+		}
+	}
+	return newSlice
+
+}
+
+func removeElementFromStringSlice(slice []string, element string) []string {
+	newSlice := make([]string, 0)
 	for _, e := range slice {
 		if e != element {
 			newSlice = append(newSlice, e)
@@ -127,10 +145,57 @@ func PrintTransferStatus(transfer *ongoingTransfer) {
 }
 
 func StartTransferForPart(fileID string, partID uint, currentSite string, registre *registre.Registre, channelFin chan<- int, wg *sync.WaitGroup) (err error) {
-	fmt.Printf("\nStarting transfer for part %d", partID)
+	// number of peers having the part
+	numberOfPeersWithFilePart := len(registre.GetPeersHavingPart(fileID, partID))
+	// If none have it, we cannot start the transfer for this part, we log an error and return
+	if numberOfPeersWithFilePart == 0 {
+		fmt.Printf("\nNo peer has part %d of file %s, cannot start transfer for this part", partID, fileID)
+		err = fmt.Errorf("no peer has part %d of file %s", partID, fileID)
+		channelFin <- int(partID)
+		wg.Done()
+		return err
+	}
+	fmt.Printf("\nStarting transfer for part %d of file %s, number of peers having this part: %d", partID, fileID, numberOfPeersWithFilePart)
+	// We take a random peer in the list of peers to not always ask the same peer first
+	peersWithPart := registre.GetPeersHavingPart(fileID, partID)
+	peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
+	fmt.Printf("\nAsking peer %s for part %d of file %s", peerToAsk, partID, fileID)
+	var partTransferWg sync.WaitGroup
+	transferSuccess, err := AskPeerForPart(peerToAsk, fileID, partID, &partTransferWg)
+	if err != nil {
+		fmt.Printf("\nError while asking peer %s for part %d of file %s: %v", peerToAsk, partID, fileID, err)
+		channelFin <- int(partID)
+		wg.Done()
+		return err
+	}
+	for !transferSuccess {
+		fmt.Printf("\nTransfer for part %d of file %s from peer %s failed, retrying with another peer if available", partID, fileID, peerToAsk)
+		// We remove the peer that failed from the list of peers to ask and we try again with another peer if available
+		peersWithPart = removeElementFromStringSlice(peersWithPart, peerToAsk)
+		if len(peersWithPart) == 0 {
+			fmt.Printf("\nNo more peer to ask for part %d of file %s, transfer failed for this part", partID, fileID)
+			err = fmt.Errorf("no more peer to ask for part %d of file %s, transfer failed for this part", partID, fileID)
+			channelFin <- int(partID)
+			wg.Done()
+			return err
+		}
+		peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
+		transferSuccess, err = AskPeerForPart(peerToAsk, fileID, partID, &partTransferWg)
+		if err != nil {
+			return err
+		}
+	}
+	fmt.Printf("\nTransfer for part %d of file %s from peer %s succeeded !", partID, fileID, peerToAsk)
+
 	channelFin <- int(partID)
 	wg.Done()
 
 	return err
 
+}
+
+func AskPeerForPart(peerID string, fileID string, partID uint, wg *sync.WaitGroup) (success bool, err error) {
+	// TODO logic
+	fmt.Print("\nAsking peer ", peerID, " for part ", partID, " of file ", fileID)
+	return true, nil
 }

@@ -369,6 +369,15 @@ func ReassembleFileFromParts(fileID string, source string, destination string, r
 	return nil
 }
 
+func (r *Registre) GetPeersHavingPart(fileID string, partID uint) []string {
+	part := r.GetFilePart(fileID, partID)
+	if part == nil {
+		fmt.Printf("File part with ID %d not found in file with ID %s\n", partID, fileID)
+		return nil
+	}
+	return part.peersThatHaveFilePartID
+}
+
 // Initialize and return the initial hardcoded register
 //
 // Parameters:
