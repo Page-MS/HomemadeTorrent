@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# 1. On récupère le chemin absolu du dossier simulations (où on veut les logs)
+# On récupère le chemin absolu du dossier simulations (où on veut les logs)
 LOG_DIR=$(pwd)
-FIFO="$LOG_DIR/backpipe"
+FIFO="/tmp/backpipe"
 PROJECT_DIR="../src/homemadeTorrent"
 
 N=3
@@ -17,7 +17,7 @@ done
 
 echo "Logs dirigés vers : $LOG_DIR"
 
-# 2. On lance l'anneau
+# On lance l'anneau
 (
   cat "$FIFO" | \
   go run -C "$PROJECT_DIR" . 1 $IDS 2> "$LOG_DIR/1.log" | \
