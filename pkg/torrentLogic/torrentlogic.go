@@ -47,7 +47,6 @@ type ongoingTransfer struct {
 	partsCompletedIDs      []uint
 	numberOfPartsCompleted int
 	receiving              bool
-	partTransfers          []PartTransfer
 }
 
 // Main function to start a transfer
@@ -139,9 +138,6 @@ func removeElementFromStringSlice(slice []string, element string) []string {
 }
 func PrintTransferStatus(transfer *ongoingTransfer) {
 	fmt.Printf("\nTransfer status for file %s\n Number of parts to send: %d\n Number of parts completed: %d\n Is receving ? : %t", transfer.file.Name, len(transfer.partsToAskIDs), transfer.numberOfPartsCompleted, transfer.receiving)
-	for _, partTransfer := range transfer.partTransfers {
-		fmt.Printf("Part %d: %s (peer: %s)\n", partTransfer.partID, stateName[partTransfer.state], partTransfer.peerID)
-	}
 }
 
 func StartTransferForPart(fileID string, partID uint, currentSite string, registre *registre.Registre, channelFin chan<- int, wg *sync.WaitGroup) (err error) {
@@ -195,7 +191,30 @@ func StartTransferForPart(fileID string, partID uint, currentSite string, regist
 }
 
 func AskPeerForPart(peerID string, fileID string, partID uint, wg *sync.WaitGroup) (success bool, err error) {
-	// TODO logic
 	fmt.Print("\nAsking peer ", peerID, " for part ", partID, " of file ", fileID)
+	/* transfer := PartTransfer{
+		partID:    partID,
+		peerID:    peerID,
+		receiving: false,
+		state:     StateNotStarted,
+	} */
+	// We send a message asking the peer for its shasum of the part
+	// If we have a valid response, we check if the shasum is correct, if not we log an error and return false
+	// If the shasum is correct, we ask the peer for the content of the part
+	// If we have a valid response, we check if the content is correct by comparing its shasum with the one we received before, if not we log an error and return false
+	// If the content is correct, we save it in the right folder and return true
 	return true, nil
+}
+
+func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID string, partID uint, reg *registre.Registre) (err error) {
+	fmt.Printf("\nPeer %s is asking if we have part %d of file %s", peerID, partID, fileID)
+	// We check locally if we can find the part in our local storage
+	// We get the file name
+
+	filepath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "./bin")
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\nFound part file %s", filepath)
+	return nil
 }

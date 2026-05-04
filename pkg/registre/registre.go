@@ -378,6 +378,35 @@ func (r *Registre) GetPeersHavingPart(fileID string, partID uint) []string {
 	return part.peersThatHaveFilePartID
 }
 
+func (r *Registre) GetFileNameByID(fileID string) string {
+	for _, file := range r.files {
+		if file.ID == fileID {
+			return file.Name
+		}
+	}
+	fmt.Printf("File with ID %s not found in register\n", fileID)
+	return ""
+}
+
+func (r *Registre) CheckIfWeHavePartInOurStorage(currentSiteID string, fileID string, partID uint, source string) (string, error) {
+	fileName := r.GetFileNameByID(fileID)
+	if fileName == "" {
+		fmt.Printf("\nFile with ID %s not found in register, cannot check if we have part %d", fileID, partID)
+		return "", fmt.Errorf("\nfile with ID %s not found in register, cannot check if we have part %d", fileID, partID)
+	}
+	part := r.GetFilePart(fileID, partID)
+	if part == nil {
+		fmt.Printf("\nFile part with ID %d not found in file with ID %s\n", partID, fileName)
+		return "", fmt.Errorf("\nfile part with ID %d not found in file with ID %s", partID, fileName)
+	}
+	partFilePath := fmt.Sprintf(source+"/%s/parts/%s_part%d", currentSiteID, fileName[:strings.LastIndex(fileName, ".")], partID-1)
+	fmt.Printf("\nChecking if we have part file %s\n", partFilePath)
+	if _, err := os.Stat(partFilePath); os.IsNotExist(err) {
+		return "", nil
+	}
+	return partFilePath, nil
+}
+
 // Initialize and return the initial hardcoded register
 //
 // Parameters:
