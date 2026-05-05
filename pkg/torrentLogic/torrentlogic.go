@@ -10,6 +10,10 @@ import (
 
 type MessageType int
 
+type PartTransferStatus int
+
+type TransferRelatedEvent int
+
 // 1. On reçoit de notre site (UI) une demande de transfert
 // 2. On reçoit AskingForShasum (vas être supprimée après réponse)
 // 2. On reçoit AskingForContent (vas être supprimée après réponse)
@@ -21,7 +25,11 @@ const (
 	AskingForContent
 )
 
-type PartTransferStatus int
+const (
+	None TransferRelatedEvent = iota
+	ReceivingShasum
+	ReceivingContent
+)
 
 const (
 	StateNotStarted PartTransferStatus = iota
@@ -73,8 +81,15 @@ type ongoingTransfer struct {
 // TODO type for message
 
 type Message struct {
-	messageType MessageType
-	deleteMe    bool
+	messageType          MessageType
+	deleteMe             bool
+	senderID             string
+	transferID           string
+	targetID             string
+	transferRelatedEvent TransferRelatedEvent
+	fileID               string
+	partID               uint
+	content              string
 }
 
 // Main function to start a transfer
