@@ -2,6 +2,7 @@ package control
 
 import (
 	"HomemadeTorrent/pkg/snapshot"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
 	"sort"
 
@@ -30,6 +31,14 @@ type Controller struct {
 
 // Adapter cette valeur en focntion de la convention choisie
 const BROADCAST string = "-1"
+
+var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
+	torrentlogic.AskingFromSC:           {},
+	torrentlogic.DoneWithSC:             {},
+	torrentlogic.TransferRelatedMessage: {},
+	torrentlogic.AskingForShasum:        {},
+	torrentlogic.AskingForContent:       {},
+}
 
 // NewController initialise un nouveau dispatcher central
 func NewController(siteID string, allSiteIDs []string) *Controller {
@@ -164,8 +173,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		returnMsg = c.handleSnapshot(pMsg)
 
 	// logique du torrent
-	// TODO: remplacer par les constantes des actions Torrent et logique de gestion
-	case "GET_PART", "SEND_PART":
+	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.AskingForContent), string(torrentlogic.AskingForShasum):
 		log.Printf("[CONTROLLER] Appel logique torrent\n")
 		c.handleTorrent(pMsg)
 

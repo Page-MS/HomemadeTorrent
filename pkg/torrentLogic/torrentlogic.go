@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-type MessageType int
+type MessageType string
 
 type PartTransferStatus int
 
@@ -18,11 +18,11 @@ type TransferRelatedEvent int
 // 2. On reçoit AskingForShasum (vas être supprimée après réponse)
 // 2. On reçoit AskingForContent (vas être supprimée après réponse)
 const (
-	AskingFromSC MessageType = iota
-	DoneWithSC
-	TransferRelatedMessage
-	AskingForShasum
-	AskingForContent
+	AskingFromSC           MessageType = "AskingFromSC"
+	DoneWithSC             MessageType = "DoneWithSC"
+	TransferRelatedMessage MessageType = "TransferRelatedMessage"
+	AskingForShasum        MessageType = "AskingForShasum"
+	AskingForContent       MessageType = "AskingForContent"
 )
 
 const (
