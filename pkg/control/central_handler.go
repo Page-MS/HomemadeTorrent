@@ -75,15 +75,14 @@ func NewSiteDirectory(siteIDs []string) SiteDirectory {
 func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	var responses []string
 
-	log.Printf("[DEBUG-CTRL] Tentative de décodage de : \n%s\n", raw)
 	// -------------- Decodage ------------------
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
-		log.Printf("[DEBUG-CTRL] ERREUR DÉCODAGE : %v\n", err)
+		log.Printf("[CONTROLLER][NETWORK] Erreur decodage: %v\n", err)
 		return responses
 	}
 
-	log.Printf("[CONTROLLER] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
+	log.Printf("[CONTROLLER][NETWORK] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
 
 	//if isApplicationMessage(pMsg.Action) && c.Snapshot.MyColor == snapshot.White {
 	//	log.Printf("[TEST] Bilan++ anticipé sur %s", pMsg.Action)
@@ -147,7 +146,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	// ------------- Logique controler --------------
 
-	log.Printf("[CONTROLLER] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
+	log.Printf("[CONTROLLER][NETWORK] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
 
 	// Redirection vers le service aproprié
 	var returnMsg parser.Message
@@ -155,12 +154,12 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	// exclusion mutuelle
 	case string(distributed_file.SC_REQUEST), string(distributed_file.SC_LIBERATION), string(distributed_file.ACK):
-		log.Printf("[CONTROLLER] Appel file répartie\n")
+		log.Printf("[CONTROLLER][NETWORK] Appel file répartie\n")
 		returnMsg = c.handleDistributedFile(pMsg)
 
 	// snapshot
 	case snapshot.MARKER, snapshot.PREPOST_COLLECT, snapshot.STATE_COLLECT, snapshot.RESET_SNAPSHOT:
-		log.Printf("[CONTROLLER] Appel snapshot\n")
+		log.Printf("[CONTROLLER][NETWORK] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
 
 	// logique du torrent
@@ -170,14 +169,17 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		c.handleTorrent(pMsg)
 
 	default:
-		log.Printf("[CONTROLLER] Action inconnue, ignorée: %s\n", pMsg.Action)
+		log.Printf("[CONTROLLER][NETWORK] Action inconnue, ignorée: %s\n", pMsg.Action)
 		return responses
 	}
 
 	// ---------- Encodage reponse ----------------
+	if returnMsg.Action == "" {
+		return responses
+	}
 	pString, err := parser.Encode(returnMsg)
 	if err != nil {
-		log.Printf("[CONTROLLER] Pas d'actions -> Pas de message à envoyer")
+		log.Printf("[CONTROLLER][NETWORK] Erreur encodage pour réseau: %v\n", err)
 		return responses
 	}
 
@@ -189,22 +191,38 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	var responses []string
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
-		log.Printf("[LOCAL] Erreur décodage commande locale: %v\n", err)
+		log.Printf("[CONTROLLER][LOCAL] Erreur décodage commande locale: %v\n", err)
 		return nil
 	}
 
+	c.Lamport.Tick()
+	c.Vector.Tick()
+
+	// ============ LOGIQUE SNAPSHOT ======================
 	//Maj du bilan
 	if isApplicationMessage(pMsg.Action) {
 		c.Snapshot.Bilan++
 	}
-
 	// Maj couleur
 	pMsg.Color = string(c.Snapshot.MyColor)
 
-	pMsg.Sender = c.SiteID
-	encodedMsg, err := parser.Encode(pMsg)
+	// ========== REDIRECTION HANDLERS ===================
+	var returnMsg parser.Message
+	switch pMsg.Action {
+	case string(distributed_file.LOCAL_SC_REQUEST), string(distributed_file.LOCAL_SC_LIBERATION):
+		log.Printf("[CONTROLLER][LOCAL] Appel file répartie\n")
+		returnMsg = c.handleDistributedFile(pMsg)
+	case snapshot.MARKER:
+		log.Printf("[CONTROLLER][LOCAL] Appel snapshot\n")
+		returnMsg = c.handleSnapshot(pMsg)
+	default:
+		log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
+		return nil
+	}
+
+	encodedMsg, err := parser.Encode(returnMsg)
 	if err != nil {
-		log.Printf("[LOCAL] Erreur encodage pour réseau: %v\n", err)
+		log.Printf("[CONTROLLER][LOCAL] Erreur encodage pour réseau: %v\n", err)
 		return nil
 	}
 
@@ -219,6 +237,9 @@ func (c *Controller) getSiteIndexFromID(id string) int {
 
 // getIdFromSIteIndex fais la correspondance entre nom de site et index
 func (c *Controller) getIdFromSIteIndex(index int) string {
+	if index == -1 { // Index de broadcast
+		return BROADCAST
+	}
 	return c.NetworkDirectory.IndexToID[index]
 }
 

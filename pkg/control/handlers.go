@@ -27,6 +27,10 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 		isReady = c.DistFile.SCStopFromNetwork(msgCtrl)
 	case distributed_file.ACK:
 		isReady = c.DistFile.AckFromNetwork(msgCtrl)
+	case distributed_file.LOCAL_SC_REQUEST:
+		responseMsg = c.DistFile.SCRequestFromBaseApp()
+	case distributed_file.LOCAL_SC_LIBERATION:
+		responseMsg = c.DistFile.SCStopFromBaseApp()
 	}
 
 	if isReady {
