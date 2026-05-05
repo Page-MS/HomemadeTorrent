@@ -75,11 +75,10 @@ func NewSiteDirectory(siteIDs []string) SiteDirectory {
 func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	var responses []string
 
-	log.Printf("[DEBUG-CTRL] Tentative de décodage de : \n%s\n", raw)
 	// -------------- Decodage ------------------
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
-		log.Printf("[DEBUG-CTRL] ERREUR DÉCODAGE : %v\n", err)
+		log.Printf("[CONTROLLER][NETWORK] Erreur decodage: %v\n", err)
 		return responses
 	}
 
@@ -175,9 +174,12 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// ---------- Encodage reponse ----------------
+	if pMsg.Action == "" {
+		return responses
+	}
 	pString, err := parser.Encode(returnMsg)
 	if err != nil {
-		log.Printf("[CONTROLLER][NETWORK] Pas d'actions -> Pas de message à envoyer")
+		log.Printf("[CONTROLLER][NETWORK] Erreur encodage pour réseau: %v\n", err)
 		return responses
 	}
 
