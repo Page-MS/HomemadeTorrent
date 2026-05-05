@@ -208,7 +208,11 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	var returnMsg parser.Message
 	switch pMsg.Action {
 	case string(distributed_file.LOCAL_SC_REQUEST), string(distributed_file.LOCAL_SC_LIBERATION):
+		log.Printf("[CONTROLLER][LOCAL] Appel file répartie\n")
 		returnMsg = c.handleDistributedFile(pMsg)
+	case snapshot.MARKER:
+		log.Printf("[CONTROLLER][LOCAL] Appel snapshot\n")
+		returnMsg = c.handleSnapshot(pMsg)
 	default:
 		log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
 		return nil
