@@ -20,7 +20,7 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool) string {
 	if c.Reg != nil {
 		c.Snapshot.SavedRegister = *c.Reg
 	} else {
-		log.Printf("[WARNING] Registre inexistant lors du snapshot !")
+		log.Printf("[SNAPSHOT][WARNING] Registre inexistant lors du snapshot !")
 		c.Snapshot.SavedRegister = registre.Registre{}
 	}
 
@@ -83,7 +83,7 @@ func (c *Controller) sendStateOnRing() string {
 
 	res, err := parser.Encode(stateMsg)
 	if err != nil {
-		log.Printf("[ERROR] Erreur encodage message: %v\n", err)
+		log.Printf("[SNAPSHOT][ERROR] Erreur encodage message: %v\n", err)
 		return ""
 	}
 

@@ -1,0 +1,8 @@
+#!/bin/sh
+
+if [ $# -lt 1 ]; then
+    echo "Erreur: ID du site necessaire en paramètre. Ex: startSnapshot.sh SITE1"
+    exit 1
+fi
+
+printf "ACTION:MARKER\nDEST:$1\n\n" > /tmp/site_input_$1
