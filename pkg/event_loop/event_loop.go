@@ -96,36 +96,38 @@ func listenStdEntry(queue chan<- Event) {
 }
 
 func listenUserInput(queue chan<- Event, siteID string) {
-	// Recuperer le fichier a lire
-	f := userInput.GetInputFile(siteID)
-	defer f.Close()
+	for {
+		// Recuperer le fichier a lire
+		f := userInput.GetInputFile(siteID)
+		defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	var buffer strings.Builder
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			// Si on a déjà accumulé des données, on traite le message
-			if buffer.Len() > 0 {
-				msg := buffer.String()
-				buffer.Reset()
+		scanner := bufio.NewScanner(f)
+		var buffer strings.Builder
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.TrimSpace(line) == "" {
+				// Si on a déjà accumulé des données, on traite le message
+				if buffer.Len() > 0 {
+					msg := buffer.String()
+					buffer.Reset()
 
-				log.Printf("[EVENT_LOOP] Message utilisateur lu en entrée: %s\n", msg)
+					log.Printf("[EVENT_LOOP] Message utilisateur lu en entrée: %s\n", msg)
 
-				queue <- Event{
-					Type:   ReadMessage,
-					Source: FromLocalUser,
-					Data:   msg,
+					queue <- Event{
+						Type:   ReadMessage,
+						Source: FromLocalUser,
+						Data:   msg,
+					}
 				}
+				continue
 			}
-			continue
+			// On rajoute un \n manuellement pour reconstruire le message proprement
+			buffer.WriteString(line + "\n")
 		}
-		// On rajoute un \n manuellement pour reconstruire le message proprement
-		buffer.WriteString(line + "\n")
-	}
 
-	if err := scanner.Err(); err != nil {
-		log.Println("[EVENT_LOOP] Erreur de lecture User Input:", err)
+		if err := scanner.Err(); err != nil {
+			log.Println("[EVENT_LOOP] Erreur de lecture User Input:", err)
+		}
 	}
 }
 

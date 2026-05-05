@@ -174,7 +174,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// ---------- Encodage reponse ----------------
-	if pMsg.Action == "" {
+	if returnMsg.Action == "" {
 		return responses
 	}
 	pString, err := parser.Encode(returnMsg)
