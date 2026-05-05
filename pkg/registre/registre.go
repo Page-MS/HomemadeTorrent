@@ -15,23 +15,24 @@ import (
 const FILE_PART_SIZE uint = 16 * 1024
 
 type filePart struct {
-	parentFileID   string
-	filePartID     uint
-	filePartSize   uint
-	filePartShasum string
+	parentFileID            string
+	filePartID              uint
+	filePartSize            uint
+	filePartShasum          string
+	peersThatHaveFilePartID []string
 }
 
-type file struct {
-	name                string
+type File struct {
+	Name                string
 	ID                  string
 	size                uint
-	peersThatHaveFileID []string
-	numberOfParts       uint
-	fileParts           []filePart
+	PeersThatHaveFileID []string
+	NumberOfParts       uint
+	FileParts           []filePart
 }
 
 type Registre struct {
-	files []file
+	files []File
 	peers []string
 }
 
@@ -58,6 +59,15 @@ func CalculateShasum(filePath string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
+func (r *Registre) IsPeerInRegister(peerID string) bool {
+	for _, peer := range r.peers {
+		if peer == peerID {
+			return true
+		}
+	}
+	return false
+}
+
 // Split a file into parts of size FILE_PART_SIZE and return the informations about the file parts
 //
 // Parameters:
@@ -80,9 +90,9 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 	fileSize := uint(fileInfo.Size())
 
 	// We calculate the number of parts
-	numberOfParts := (fileSize / FILE_PART_SIZE) + 1
+	NumberOfParts := (fileSize / FILE_PART_SIZE) + 1
 	// We create the file parts
-	fileParts := make([]filePart, numberOfParts)
+	FileParts := make([]filePart, NumberOfParts)
 
 	// We read the file and split it into parts
 	file, err := os.Open(filePath)
@@ -99,9 +109,9 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 		return nil, fmt.Errorf("could not create destination folder: %v", err)
 	}
 
-	for i := uint(0); i < numberOfParts; i++ {
+	for i := uint(0); i < NumberOfParts; i++ {
 		partSize := FILE_PART_SIZE
-		if i == numberOfParts-1 {
+		if i == NumberOfParts-1 {
 			partSize = fileSize - (i * FILE_PART_SIZE)
 		}
 		// get the content of the file part
@@ -122,7 +132,7 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not calculate shasum: %v", err)
 		} else {
-			fileParts[i] = filePart{
+			FileParts[i] = filePart{
 				parentFileID:   partFileName,
 				filePartID:     i + 1, // We start the file part ID at 1 for better readability
 				filePartSize:   partSize,
@@ -132,7 +142,22 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 
 	}
 
-	return fileParts, nil
+	return FileParts, nil
+}
+
+func (r *Registre) GetShasumOfPart(fileID string, partID uint) (string, error) {
+	file := r.GetFileByID(fileID)
+	if file == nil {
+		return "", fmt.Errorf("file with ID %s not found", fileID)
+	}
+
+	for _, part := range file.FileParts {
+		if part.filePartID == partID {
+			return part.filePartShasum, nil
+		}
+	}
+
+	return "", fmt.Errorf("part with ID %d not found in file %s", partID, fileID)
 }
 
 // Get the information about a file based on its ID
@@ -142,13 +167,22 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 //
 // Returns:
 // - a pointer to the file if it is found in the register, nil otherwise
-func (r *Registre) GetFileByID(fileID string) *file {
+func (r *Registre) GetFileByID(fileID string) *File {
 	for i, file := range r.files {
 		if file.ID == fileID {
 			return &r.files[i]
 		}
 	}
 	fmt.Printf("File with ID %s not found\n", fileID)
+	return nil
+}
+
+func (r *Registre) GetFileByName(fileName string) *File {
+	for i, file := range r.files {
+		if file.Name == fileName {
+			return &r.files[i]
+		}
+	}
 	return nil
 }
 
@@ -170,19 +204,19 @@ func (r *Registre) PutAllFilesFromDirectoryInRegister(source string, destination
 	for _, fileTreated := range files {
 		if !fileTreated.IsDir() {
 			filePath := source + "/" + fileTreated.Name()
-			fileParts, err := SplitFile(filePath, destination)
+			FileParts, err := SplitFile(filePath, destination)
 			if err != nil {
 				fmt.Printf("Error splitting file: %v\n", err)
 				continue
 			}
 			fileInfo, _ := fileTreated.Info()
 			fileSize := fileInfo.Size()
-			newFile := file{
-				name:          fileTreated.Name(),
+			newFile := File{
+				Name:          fileTreated.Name(),
 				ID:            CalculateShasum(filePath),
 				size:          uint(fileSize),
-				numberOfParts: uint(len(fileParts)),
-				fileParts:     fileParts,
+				NumberOfParts: uint(len(FileParts)),
+				FileParts:     FileParts,
 			}
 			r.AddFile(newFile)
 		}
@@ -195,8 +229,8 @@ func (r *Registre) PutAllFilesFromDirectoryInRegister(source string, destination
 //
 // - file: the informations of the file to copy
 // - siteID: the ID of the current site, used to create the destination path of the file to copy
-func initialisationFileCopy(fileInfos file, siteID string) {
-	fileURL := "bin/baseFiles/" + fileInfos.name
+func initialisationFileCopy(fileInfos File, siteID string) {
+	fileURL := "bin/baseFiles/" + fileInfos.Name
 	filecontent, err := os.ReadFile(fileURL)
 	if err != nil {
 		fmt.Printf("Error reading file: %v\n", err)
@@ -211,7 +245,7 @@ func initialisationFileCopy(fileInfos file, siteID string) {
 		}
 	}
 
-	err = os.WriteFile("bin/"+siteID+"/"+"fullFiles"+siteID+"_"+fileInfos.name, filecontent, 0644)
+	err = os.WriteFile("bin/"+siteID+"/"+fileInfos.Name, filecontent, 0644)
 	if err != nil {
 		fmt.Printf("Error writing file: %v\n", err)
 		return
@@ -219,7 +253,7 @@ func initialisationFileCopy(fileInfos file, siteID string) {
 }
 
 // add the informations of a file in the register
-func (r *Registre) AddFile(fileInfos file) {
+func (r *Registre) AddFile(fileInfos File) {
 	r.files = append(r.files, fileInfos)
 }
 
@@ -233,7 +267,7 @@ func (r *Registre) GetPeerList() []string {
 }
 
 // Return the data structure of the files in the register
-func (r *Registre) GetFileList() []file {
+func (r *Registre) GetFileList() []File {
 	if len(r.files) == 0 {
 		fmt.Printf("No files in the register\n")
 		return nil
@@ -255,13 +289,33 @@ func (r *Registre) GetFilePart(fileID string, partID uint) *filePart {
 		fmt.Printf("File with ID %s not found\n", fileID)
 		return nil
 	}
-	for i, part := range file.fileParts {
+	for i, part := range file.FileParts {
 		if part.filePartID == partID {
-			return &file.fileParts[i]
+			return &file.FileParts[i]
 		}
 	}
 	fmt.Printf("File part with ID %d not found in file with ID %s\n", partID, fileID)
 	return nil
+}
+
+// Print the register for debug purposes
+func (r *Registre) DetailedPrintRegister() {
+	if len(r.files) == 0 {
+		fmt.Printf("No files in the register\n")
+		return
+	}
+	for _, file := range r.files {
+		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.Name, file.ID, file.size, file.NumberOfParts)
+		for _, peer := range file.PeersThatHaveFileID {
+			fmt.Printf("\tPeer that has the file: %s\n", peer)
+		}
+		for _, part := range file.FileParts {
+			fmt.Printf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.filePartID, part.filePartSize, part.filePartShasum)
+			for _, peer := range part.peersThatHaveFilePartID {
+				fmt.Printf("\tPeer that has the file part: %s\n", peer)
+			}
+		}
+	}
 }
 
 // Print the register for debug purposes
@@ -271,12 +325,9 @@ func (r *Registre) PrintRegister() {
 		return
 	}
 	for _, file := range r.files {
-		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.name, file.ID, file.size, file.numberOfParts)
-		for _, peer := range file.peersThatHaveFileID {
+		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.Name, file.ID, file.size, file.NumberOfParts)
+		for _, peer := range file.PeersThatHaveFileID {
 			fmt.Printf("\tPeer that has the file: %s\n", peer)
-		}
-		for _, part := range file.fileParts {
-			fmt.Printf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.filePartID, part.filePartSize, part.filePartShasum)
 		}
 	}
 }
@@ -284,9 +335,91 @@ func (r *Registre) PrintRegister() {
 // Create an empty register
 func NewRegistre() *Registre {
 	return &Registre{
-		files: []file{},
+		files: []File{},
 		peers: []string{},
 	}
+}
+
+// Reassemble a file from its parts and save it in the specified path
+//
+// Parameters:
+// - fileID: the ID of the file to reassemble
+// - source: the path of the directory containing the file parts
+// - destination: the path of the directory where the reassembled file will be created
+// - registre: the register containing the file parts information
+//
+// Returns:
+// - an error if something went wrong, nil otherwise
+func ReassembleFileFromParts(fileID string, source string, destination string, registre *Registre) error {
+	file := registre.GetFileByName(fileID)
+	if file == nil {
+		return fmt.Errorf("file with ID %s not found in register", fileID)
+	}
+	// We create the folder if it doesn't exist
+	if _, err := os.Stat(destination); os.IsNotExist(err) {
+		err = os.Mkdir(destination, 0755)
+		if err != nil {
+			return fmt.Errorf("could not create destination folder: %v", err)
+		}
+	}
+	outputFile, err := os.Create(destination + "/" + file.Name)
+	if err != nil {
+		return fmt.Errorf("could not create output file: %v", err)
+	}
+	defer outputFile.Close()
+	// We use a buffer to write each parts in the output file
+	// The parts are in the parts subfolder and are named following the convention fileName_partX
+	for i := uint(0); i < file.NumberOfParts; i++ {
+		partFilePath := fmt.Sprintf(source+"/%s_part%d", file.Name[:strings.LastIndex(file.Name, ".")], i)
+		partFileContent, err := os.ReadFile(partFilePath)
+		if err != nil {
+			return fmt.Errorf("could not read file part: %v", err)
+		}
+		_, err = outputFile.Write(partFileContent)
+		if err != nil {
+			return fmt.Errorf("could not write to output file: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *Registre) GetPeersHavingPart(fileID string, partID uint) []string {
+	part := r.GetFilePart(fileID, partID)
+	if part == nil {
+		fmt.Printf("File part with ID %d not found in file with ID %s\n", partID, fileID)
+		return nil
+	}
+	return part.peersThatHaveFilePartID
+}
+
+func (r *Registre) GetFileNameByID(fileID string) string {
+	for _, file := range r.files {
+		if file.ID == fileID {
+			return file.Name
+		}
+	}
+	fmt.Printf("File with ID %s not found in register\n", fileID)
+	return ""
+}
+
+func (r *Registre) CheckIfWeHavePartInOurStorage(currentSiteID string, fileID string, partID uint, source string) (string, error) {
+	fileName := r.GetFileNameByID(fileID)
+	if fileName == "" {
+		fmt.Printf("\nFile with ID %s not found in register, cannot check if we have part %d", fileID, partID)
+		return "", fmt.Errorf("\nfile with ID %s not found in register, cannot check if we have part %d", fileID, partID)
+	}
+	part := r.GetFilePart(fileID, partID)
+	if part == nil {
+		fmt.Printf("\nFile part with ID %d not found in file with ID %s\n", partID, fileName)
+		return "", fmt.Errorf("\nfile part with ID %d not found in file with ID %s", partID, fileName)
+	}
+	partFilePath := fmt.Sprintf(source+"/%s/parts/%s_part%d", currentSiteID, fileName[:strings.LastIndex(fileName, ".")], partID-1)
+	fmt.Printf("\nChecking if we have part file %s\n", partFilePath)
+	if _, err := os.Stat(partFilePath); os.IsNotExist(err) {
+		return "", nil
+	}
+	return partFilePath, nil
 }
 
 // Initialize and return the initial hardcoded register
@@ -304,13 +437,25 @@ func MakeInitialHardcodedRegister(registre *Registre, sourcePath string, destina
 	// TODO: make this more dynamic and less hardcoded
 	for i := range registre.GetFileList() {
 		if i%4 == 0 {
-			registre.files[i].peersThatHaveFileID = []string{"Mathy", "Alexis"}
+			registre.files[i].PeersThatHaveFileID = []string{"Mathy", "Alexis"}
+			for part := range registre.files[i].FileParts {
+				registre.files[i].FileParts[part].peersThatHaveFilePartID = []string{"Mathy", "Alexis"}
+			}
 		} else if i%4 == 1 {
-			registre.files[i].peersThatHaveFileID = []string{"Noah", "Page"}
+			registre.files[i].PeersThatHaveFileID = []string{"Noah", "Page"}
+			for part := range registre.files[i].FileParts {
+				registre.files[i].FileParts[part].peersThatHaveFilePartID = []string{"Noah", "Page"}
+			}
 		} else if i%4 == 2 {
-			registre.files[i].peersThatHaveFileID = []string{"Mathy", "Noah"}
+			registre.files[i].PeersThatHaveFileID = []string{"Mathy", "Noah"}
+			for part := range registre.files[i].FileParts {
+				registre.files[i].FileParts[part].peersThatHaveFilePartID = []string{"Mathy", "Noah"}
+			}
 		} else {
-			registre.files[i].peersThatHaveFileID = []string{"Alexis", "Page"}
+			registre.files[i].PeersThatHaveFileID = []string{"Alexis", "Page"}
+			for part := range registre.files[i].FileParts {
+				registre.files[i].FileParts[part].peersThatHaveFilePartID = []string{"Alexis", "Page"}
+			}
 		}
 	}
 
@@ -329,9 +474,9 @@ func InitialiseRegistre(currentSiteID string, registre *Registre) {
 		return
 	}
 	// We get the files that the site should have at the beginning of the execution of the program based on the precreated common register
-	filesToHave := make([]file, 0)
+	filesToHave := make([]File, 0)
 	for _, file := range registre.GetFileList() {
-		if slices.Contains(file.peersThatHaveFileID, currentSiteID) {
+		if slices.Contains(file.PeersThatHaveFileID, currentSiteID) {
 			filesToHave = append(filesToHave, file)
 		}
 	}
@@ -342,7 +487,7 @@ func InitialiseRegistre(currentSiteID string, registre *Registre) {
 	// We copy the files that the site should have at the beginning of the execution of the program based on the precreated common register from the fullFiles folder to the site folder
 	for _, file := range filesToHave {
 		initialisationFileCopy(file, currentSiteID)
-		SplitFile("bin/"+currentSiteID+"/"+"fullFiles"+currentSiteID+"_"+file.name, "bin/"+currentSiteID+"/parts")
+		SplitFile("bin/"+currentSiteID+"/"+file.Name, "bin/"+currentSiteID+"/parts")
 	}
 
 }

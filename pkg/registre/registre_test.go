@@ -27,20 +27,20 @@ func TestPutAllFilesFromDirectoryInRegister(t *testing.T) {
 	if file == nil {
 		t.Fatal("File not found in register")
 	}
-	fmt.Printf("File found: %s\n", file.name)
+	fmt.Printf("File found: %s\n", file.Name)
 	if file.ID != CalculateShasum("../../bin/baseFiles/babiesducks.png") {
 		t.Errorf("Expected ID %s, got %s", CalculateShasum("../../bin/baseFiles/babiesducks.png"), file.ID)
 	}
 	if file.size != 1124038 { // babiesducks.png actual size (1.1M)
 		t.Errorf("Expected size %d, got %d", 1124038, file.size)
 	}
-	if file.numberOfParts != 69 { // Number of 16KiB parts for a 1.1M file
-		t.Errorf("Expected number of parts %d, got %d", 69, file.numberOfParts)
+	if file.NumberOfParts != 69 { // Number of 16KiB parts for a 1.1M file
+		t.Errorf("Expected number of parts %d, got %d", 69, file.NumberOfParts)
 	}
-	if len(file.fileParts) != int(file.numberOfParts) {
-		t.Errorf("Expected file parts length %d, got %d", file.numberOfParts, len(file.fileParts))
+	if len(file.FileParts) != int(file.NumberOfParts) {
+		t.Errorf("Expected file parts length %d, got %d", file.NumberOfParts, len(file.FileParts))
 	}
-	for i, part := range file.fileParts {
+	for i, part := range file.FileParts {
 		expectedPartName := fmt.Sprintf("../../bin/parts/babiesducks_part%d", i)
 		if part.parentFileID != expectedPartName {
 			t.Errorf("Expected part name %s, got %s", expectedPartName, part.parentFileID)
@@ -62,7 +62,7 @@ func TestMakeInitialHardcodedRegister(t *testing.T) {
 		t.Error("Expected at least one file in the register, got 0")
 	}
 	for _, file := range reg.files {
-		if file.name == "" {
+		if file.Name == "" {
 			t.Error("Expected non-empty file name, got empty string")
 		}
 		if file.ID == "" {
@@ -71,13 +71,13 @@ func TestMakeInitialHardcodedRegister(t *testing.T) {
 		if file.size <= 0 {
 			t.Errorf("Expected file size greater than 0, got %d", file.size)
 		}
-		if file.numberOfParts <= 0 {
-			t.Errorf("Expected number of parts greater than 0, got %d", file.numberOfParts)
+		if file.NumberOfParts <= 0 {
+			t.Errorf("Expected number of parts greater than 0, got %d", file.NumberOfParts)
 		}
-		if len(file.fileParts) != int(file.numberOfParts) {
-			t.Errorf("Expected file parts length %d, got %d", file.numberOfParts, len(file.fileParts))
+		if len(file.FileParts) != int(file.NumberOfParts) {
+			t.Errorf("Expected file parts length %d, got %d", file.NumberOfParts, len(file.FileParts))
 		}
-		for _, part := range file.fileParts {
+		for _, part := range file.FileParts {
 			if part.filePartSize <= 0 {
 				t.Errorf("Expected part size greater than 0, got %d", part.filePartSize)
 			}
@@ -96,7 +96,7 @@ func TestInitialiseRegistre(t *testing.T) {
 		t.Error("Expected at least one file in the register, got 0")
 	}
 	for _, file := range reg.files {
-		if file.name == "" {
+		if file.Name == "" {
 			t.Error("Expected non-empty file name, got empty string")
 		}
 		if file.ID == "" {
@@ -105,13 +105,13 @@ func TestInitialiseRegistre(t *testing.T) {
 		if file.size <= 0 {
 			t.Errorf("Expected file size greater than 0, got %d", file.size)
 		}
-		if file.numberOfParts <= 0 {
-			t.Errorf("Expected number of parts greater than 0, got %d", file.numberOfParts)
+		if file.NumberOfParts <= 0 {
+			t.Errorf("Expected number of parts greater than 0, got %d", file.NumberOfParts)
 		}
-		if len(file.fileParts) != int(file.numberOfParts) {
-			t.Errorf("Expected file parts length %d, got %d", file.numberOfParts, len(file.fileParts))
+		if len(file.FileParts) != int(file.NumberOfParts) {
+			t.Errorf("Expected file parts length %d, got %d", file.NumberOfParts, len(file.FileParts))
 		}
-		for _, part := range file.fileParts {
+		for _, part := range file.FileParts {
 			if part.filePartSize <= 0 {
 				t.Errorf("Expected part size greater than 0, got %d", part.filePartSize)
 			}
