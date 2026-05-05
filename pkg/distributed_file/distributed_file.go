@@ -9,9 +9,11 @@ import (
 type MessageType string
 
 const (
-	SC_REQUEST    MessageType = "SC_REQUEST"
-	SC_LIBERATION MessageType = "SC_LIBERATION"
-	ACK           MessageType = "ACK"
+	SC_REQUEST          MessageType = "SC_REQUEST"
+	SC_LIBERATION       MessageType = "SC_LIBERATION"
+	ACK                 MessageType = "ACK"
+	LOCAL_SC_REQUEST    MessageType = "LOCAL_SC_REQUEST"
+	LOCAL_SC_LIBERATION MessageType = "LOCAL_SC_LIBERATION"
 )
 
 type TabEntry struct {
@@ -170,6 +172,10 @@ func ParseFileMessageType(s string) (MessageType, error) {
 		return SC_LIBERATION, nil
 	case string(ACK):
 		return ACK, nil
+	case string(LOCAL_SC_REQUEST):
+		return LOCAL_SC_REQUEST, nil
+	case string(LOCAL_SC_LIBERATION):
+		return LOCAL_SC_LIBERATION, nil
 	default:
 		return "", fmt.Errorf("[FILE REPARTIE] unknown MessageType: %s", s)
 	}
