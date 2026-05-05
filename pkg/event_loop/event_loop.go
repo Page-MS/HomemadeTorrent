@@ -2,6 +2,7 @@ package event_loop
 
 import (
 	"HomemadeTorrent/pkg/control"
+	userInput "HomemadeTorrent/pkg/user_input"
 	"bufio"
 	"fmt"
 	"log"
@@ -32,20 +33,18 @@ type Event struct {
 }
 
 func Start(allSiteIDs []string, siteID string) {
-	// Def des logs
-	//logFile, _ := os.Create(siteID + ".log")
-	//log.SetOutput(logFile)
+	// Init user fifo entry point
+	userInput.CreateFIFOInput(siteID)
 
 	// Channels
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
-	localUserChan := make(chan string, 100)
 
-	// Controler et app torrent
+	// Init Controler
 	controler := control.NewController(siteID, allSiteIDs)
 
 	go listenStdEntry(eventQueue)
-	go listenUserInput(localUserChan, eventQueue)
+	go listenUserInput(eventQueue, siteID)
 	go siteLogic(processingChan, eventQueue, controler)
 
 	log.Printf("[EVENT_LOOP] START\n")
@@ -77,7 +76,7 @@ func listenStdEntry(queue chan<- Event) {
 				msg := buffer.String()
 				buffer.Reset()
 
-				log.Printf("[EVENT_LOOP] Message lu en entrée: %s\n", msg)
+				log.Printf("[EVENT_LOOP] Message réseau lu en entrée: %s\n", msg)
 
 				queue <- Event{
 					Type:   ReadMessage,
@@ -96,13 +95,37 @@ func listenStdEntry(queue chan<- Event) {
 	}
 }
 
-func listenUserInput(userInputChan <-chan string, queue chan<- Event) {
-	for msg := range userInputChan {
-		queue <- Event{
-			Type:   ReadMessage,
-			Source: FromLocalUser,
-			Data:   msg,
+func listenUserInput(queue chan<- Event, siteID string) {
+	// Recuperer le fichier a lire
+	f := userInput.GetInputFile(siteID)
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	var buffer strings.Builder
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			// Si on a déjà accumulé des données, on traite le message
+			if buffer.Len() > 0 {
+				msg := buffer.String()
+				buffer.Reset()
+
+				log.Printf("[EVENT_LOOP] Message utilisateur lu en entrée: %s\n", msg)
+
+				queue <- Event{
+					Type:   ReadMessage,
+					Source: FromLocalUser,
+					Data:   msg,
+				}
+			}
+			continue
 		}
+		// On rajoute un \n manuellement pour reconstruire le message proprement
+		buffer.WriteString(line + "\n")
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Println("[EVENT_LOOP] Erreur de lecture User Input:", err)
 	}
 }
 

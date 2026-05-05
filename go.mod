@@ -1,5 +1,8 @@
 module HomemadeTorrent
 
-go 1.22.2
+go 1.25.0
 
-require github.com/google/uuid v1.6.0 // indirect
+require (
+	github.com/google/uuid v1.6.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
+)
