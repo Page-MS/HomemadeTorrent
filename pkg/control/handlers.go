@@ -114,12 +114,23 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 
 // TODO: handleTorrent pour les messages de fichiers
 func (c *Controller) handleTorrent(pMsg parser.Message) {
-	// Regarder si l'id de transfert est deja connue
-	// -> Si oui alors envoyer à la go-routine
-	// -> Si non alors créer la go-routine et lui donner le message
+	// conversion du message Controle vers message torrent
+	msgTorrent, err := c.ParserMessageToTorrentMessage(pMsg)
+	if err != nil {
+		log.Printf("[CONTROLLER] Conversion message controler vers message torrent impossible: %v\n", err)
+		return
+	}
 
 	switch pMsg.Action {
 	case string(torrentlogic.TransferRelatedMessage):
+		transfer, exist := c.TorrentTransfers[msgTorrent.TransferID]
+		if !exist {
+			inputChan := make(chan torrentlogic.Message, 100)
+			outputChan := make(chan torrentlogic.Message, 100)
+			go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, &c.Register, inputChan, outputChan)
+		}
+		transfer.Input <- msgTorrent
 
+		// TODO: voir avec Page que faire lors de la reception des messages de type AskingForShasum et AskingForContent
 	}
 }

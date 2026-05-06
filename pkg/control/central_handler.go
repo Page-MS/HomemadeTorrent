@@ -22,10 +22,6 @@ type TransferConnection struct {
 	Output <-chan torrentlogic.Message
 }
 
-type TransfersMap struct {
-	peers map[string]TransferConnection
-}
-
 type Controller struct {
 	Lamport          *clock.LamportClock
 	Vector           *clock.VectorClock
@@ -36,6 +32,8 @@ type Controller struct {
 	SeenMessages     map[string]bool // Messages déjà vu par le site
 	NetworkDirectory SiteDirectory   // Correspondance SiteId et index
 	Snapshot         *snapshot.Snapshot
+	TorrentTransfers map[string]TransferConnection // Map des transfers torrent en cour
+	Register         registre.Registre
 }
 
 // Adapter cette valeur en focntion de la convention choisie

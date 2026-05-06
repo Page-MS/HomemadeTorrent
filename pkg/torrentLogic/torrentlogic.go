@@ -94,7 +94,7 @@ type Message struct {
 
 // Main function to start a transfer
 // It will then autonomously handle it until it's finished
-func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan int, outputMessagesChannel <-chan int) (success bool, error error) {
+func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel <-chan Message) (success bool, error error) {
 	fmt.Print("\nStarting transfer for file ID: ", fileID)
 	file := reg.GetFileByID(fileID)
 	if file == nil {

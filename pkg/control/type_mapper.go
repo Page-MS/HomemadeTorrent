@@ -3,6 +3,7 @@ package control
 import (
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"fmt"
 )
 
@@ -27,4 +28,15 @@ func (c *Controller) FileMessageToParserMessage(fMsg distributed_file.Message) (
 		Dest:   c.getIdFromSIteIndex(fMsg.IndexDest),
 		Sender: c.getIdFromSIteIndex(fMsg.IndexSender),
 	}, nil
+}
+
+func (c *Controller) ParserMessageToTorrentMessage(pMsg parser.Message) (torrentlogic.Message, error) {
+	if pMsg.Payload == "" {
+		return torrentlogic.Message{}, fmt.Errorf("[MAPPER] Payload vide, impossible de convertir en un message torrent\n")
+	}
+	torrentMsgType, err := parser.DecodeTorrentPayload(pMsg.Payload)
+	if err != nil {
+		return torrentlogic.Message{}, fmt.Errorf("[MAPPER] Impossible de décoder le payload torrent: %v\n", err)
+	}
+	return torrentMsgType, nil
 }

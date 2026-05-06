@@ -187,40 +187,60 @@ func DecodeTorrentPayload(raw_payload string) (torrentlogic.Message, error) {
 		value := strings.TrimSpace(parts[1])
 		switch key {
 		case "MessageType":
-			msg.MessageType = torrentlogic.MessageType(value)
+			{
+				msg.MessageType = torrentlogic.MessageType(value)
+			}
 		case "DeleteMe":
-			b, err := strconv.ParseBool(value)
-			if err != nil {
-				log.Printf("[PARSER] Erreur: %v\n", err)
-				return torrentlogic.Message{}, errors.New("Impossible to convert DeleteMe value")
+			{
+				b, err := strconv.ParseBool(value)
+				if err != nil {
+					log.Printf("[PARSER] Erreur: %v\n", err)
+					return torrentlogic.Message{}, errors.New("Impossible to convert DeleteMe value")
+				}
+				msg.DeleteMe = b
 			}
-			msg.DeleteMe = b
 		case "SenderID":
-			msg.SenderID = value
+			{
+				msg.SenderID = value
+			}
 		case "TransferID":
-			msg.TransferID = value
+			{
+				msg.TransferID = value
+			}
 		case "TargetID":
-			msg.TargetID = value
+			{
+				msg.TargetID = value
+			}
 		case "TransferRelatedEvent":
-			val, err := strconv.Atoi(value)
-			if err != nil {
-				log.Printf("[PARSER] Erreur: %v\n", err)
-				return torrentlogic.Message{}, errors.New("Impossible to convert TransferRelatedEvent value")
+			{
+				val, err := strconv.Atoi(value)
+				if err != nil {
+					log.Printf("[PARSER] Erreur: %v\n", err)
+					return torrentlogic.Message{}, errors.New("Impossible to convert TransferRelatedEvent value")
+				}
+				msg.TransferRelatedEvent = torrentlogic.TransferRelatedEvent(val)
 			}
-			msg.TransferRelatedEvent = torrentlogic.TransferRelatedEvent(val)
 		case "FileID":
-			msg.FileID = value
-		case "PartID":
-			val, err := strconv.Atoi(value)
-			if err != nil {
-				log.Printf("[PARSER] Erreur: %v\n", err)
-				return torrentlogic.Message{}, errors.New("Impossible to convert PartID value")
+			{
+				msg.FileID = value
 			}
-			msg.PartID = uint(val)
+		case "PartID":
+			{
+				val, err := strconv.Atoi(value)
+				if err != nil {
+					log.Printf("[PARSER] Erreur: %v\n", err)
+					return torrentlogic.Message{}, errors.New("Impossible to convert PartID value")
+				}
+				msg.PartID = uint(val)
+			}
 		case "Content":
-			msg.Content = value
+			{
+				msg.Content = value
+			}
 		default:
-			return torrentlogic.Message{}, errors.New("Found unknown field: " + key)
+			{
+				return torrentlogic.Message{}, errors.New("Found unknown field: " + key)
+			}
 		}
 	}
 	return msg, nil
@@ -241,8 +261,9 @@ func EncodeTorrentPayload(msg torrentlogic.Message) (string, error) {
 	}
 
 	if msg.TransferID != "" {
-		data = append(data, "TransferID:"+msg.TransferID)
+		msg.TransferID = uuid.New().String()
 	}
+	data = append(data, "TransferID:"+msg.TransferID)
 
 	if msg.TargetID != "" {
 		data = append(data, "TargetID:"+msg.TargetID)
