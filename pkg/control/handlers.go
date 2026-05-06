@@ -2,6 +2,7 @@ package control
 
 import (
 	"HomemadeTorrent/pkg/snapshot"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
 
 	"HomemadeTorrent/pkg/distributed_file"
@@ -113,5 +114,12 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 
 // TODO: handleTorrent pour les messages de fichiers
 func (c *Controller) handleTorrent(pMsg parser.Message) {
-	log.Printf("[TORRENT] Traitement de la pièce %d pour l'objet %s", pMsg.Chunk, pMsg.Object)
+	// Regarder si l'id de transfert est deja connue
+	// -> Si oui alors envoyer à la go-routine
+	// -> Si non alors créer la go-routine et lui donner le message
+
+	switch pMsg.Action {
+	case string(torrentlogic.TransferRelatedMessage):
+
+	}
 }

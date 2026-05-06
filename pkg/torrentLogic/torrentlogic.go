@@ -81,15 +81,15 @@ type ongoingTransfer struct {
 // TODO type for message
 
 type Message struct {
-	messageType          MessageType
-	deleteMe             bool
-	senderID             string
-	transferID           string
-	targetID             string
-	transferRelatedEvent TransferRelatedEvent
-	fileID               string
-	partID               uint
-	content              string
+	MessageType          MessageType
+	DeleteMe             bool
+	SenderID             string
+	TransferID           string
+	TargetID             string
+	TransferRelatedEvent TransferRelatedEvent
+	FileID               string
+	PartID               uint
+	Content              string
 }
 
 // Main function to start a transfer

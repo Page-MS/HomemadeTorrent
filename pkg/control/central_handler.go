@@ -17,6 +17,15 @@ type SiteDirectory struct {
 	IndexToID []string
 }
 
+type TransferConnection struct {
+	Input  chan<- torrentlogic.Message
+	Output <-chan torrentlogic.Message
+}
+
+type TransfersMap struct {
+	peers map[string]TransferConnection
+}
+
 type Controller struct {
 	Lamport          *clock.LamportClock
 	Vector           *clock.VectorClock
@@ -173,7 +182,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	// logique du torrent
 	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.AskingForContent), string(torrentlogic.AskingForShasum):
-		log.Printf("[CONTROLLER] Appel logique torrent\n")
+		log.Printf("[CONTROLLER][NETWORK] Appel logique torrent\n")
 		c.handleTorrent(pMsg)
 
 	default:
@@ -194,7 +203,6 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	return append(responses, pString)
 }
 
-// TODO: HandleIncomingFromLocal gère les demande venant de l'app Torrent
 func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	var responses []string
 	pMsg, err := parser.Decode(raw)
@@ -223,6 +231,9 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	case snapshot.MARKER:
 		log.Printf("[CONTROLLER][LOCAL] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
+	case string(torrentlogic.AskingFromSC), string(torrentlogic.DoneWithSC):
+		log.Printf("[CONTROLLER][LOCAL] Appel logique torrent\n")
+		c.handleTorrent(pMsg)
 	default:
 		log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
 		return nil
