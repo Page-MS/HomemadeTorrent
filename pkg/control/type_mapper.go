@@ -40,3 +40,20 @@ func (c *Controller) ParserMessageToTorrentMessage(pMsg parser.Message) (torrent
 	}
 	return torrentMsgType, nil
 }
+
+func (c *Controller) TorrentMessageToParserMessage(tMsg torrentlogic.Message) (parser.Message, error) {
+	payload, err := parser.EncodeTorrentPayload(tMsg)
+	if err != nil {
+		return parser.Message{}, fmt.Errorf("[MAPPER] Impossible d'encoder le payload torrent: %v", err)
+	}
+
+	return parser.Message{
+		Action:  string(tMsg.MessageType),
+		Stamp:   c.Lamport.GetValue(),
+		Vect:    c.Vector.GetCopy(),
+		Dest:    tMsg.TargetID, // TODO: a confirmer que c'est le bon champ avec Page
+		Sender:  c.SiteID,
+		Payload: payload,
+		// TODO: voir avec noah si besoin de la couleur
+	}, nil
+}

@@ -2,6 +2,8 @@ package event_loop
 
 import (
 	"HomemadeTorrent/pkg/control"
+	"HomemadeTorrent/pkg/parser"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	userInput "HomemadeTorrent/pkg/user_input"
 	"bufio"
 	"fmt"
@@ -128,6 +130,35 @@ func listenUserInput(queue chan<- Event, siteID string) {
 		if err := scanner.Err(); err != nil {
 			log.Println("[EVENT_LOOP] Erreur de lecture User Input:", err)
 		}
+	}
+}
+
+func listenLocalTorrentOutput(torrentOutput <-chan torrentlogic.Message, queue chan<- Event, c *control.Controller) {
+	for msg := range torrentOutput {
+		// Deux cas possible:
+		// demande/liberation SC -> controler
+		// message de transfers pour la sortie
+		ctrlMsg, err := c.TorrentMessageToParserMessage(msg)
+		if err != nil {
+			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
+		}
+		strMsg, err := parser.Encode(ctrlMsg)
+		if err != nil {
+			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
+		}
+
+		event := Event{
+			Source: FromLocalUser,
+			Data:   strMsg,
+		}
+
+		if msg.MessageType == torrentlogic.AskingFromSC || msg.MessageType == torrentlogic.DoneWithSC {
+			event.Type = ReadMessage
+		} else {
+			event.Type = WriteMessage
+		}
+
+		queue <- event
 	}
 }
 

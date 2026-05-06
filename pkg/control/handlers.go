@@ -136,13 +136,12 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 	switch pMsg.Action {
 	case string(torrentlogic.TransferRelatedMessage):
 		{
-			transfer, exist := c.TorrentTransfers[msgTorrent.TransferID]
+			input, exist := c.InputTorrentTransfers[msgTorrent.TransferID]
 			if !exist {
 				inputChan := make(chan torrentlogic.Message, 100)
-				outputChan := make(chan torrentlogic.Message, 100)
-				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, &c.Register, inputChan, outputChan)
+				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Register, inputChan, c.OutputTorrentChan)
 			}
-			transfer.Input <- msgTorrent
+			input <- msgTorrent
 			return parser.Message{}
 		}
 

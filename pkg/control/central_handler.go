@@ -17,23 +17,19 @@ type SiteDirectory struct {
 	IndexToID []string
 }
 
-type TransferConnection struct {
-	Input  chan<- torrentlogic.Message
-	Output <-chan torrentlogic.Message
-}
-
 type Controller struct {
-	Lamport          *clock.LamportClock
-	Vector           *clock.VectorClock
-	DistFile         *distributed_file.DistributedFile
-	Reg              *registre.Registre
-	SiteID           string          // nom du site
-	SiteIndex        int             // index du site
-	SeenMessages     map[string]bool // Messages déjà vu par le site
-	NetworkDirectory SiteDirectory   // Correspondance SiteId et index
-	Snapshot         *snapshot.Snapshot
-	TorrentTransfers map[string]TransferConnection // Map des transfers torrent en cour
-	Register         registre.Registre
+	Lamport               *clock.LamportClock
+	Vector                *clock.VectorClock
+	DistFile              *distributed_file.DistributedFile
+	Reg                   *registre.Registre
+	SiteID                string          // nom du site
+	SiteIndex             int             // index du site
+	SeenMessages          map[string]bool // Messages déjà vu par le site
+	NetworkDirectory      SiteDirectory   // Correspondance SiteId et index
+	Snapshot              *snapshot.Snapshot
+	InputTorrentTransfers map[string]chan<- torrentlogic.Message // Map des inputs des transfers torrent en cour
+	OutputTorrentChan     <-chan torrentlogic.Message
+	Register              *registre.Registre
 }
 
 // Adapter cette valeur en focntion de la convention choisie
@@ -51,6 +47,7 @@ var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
 func NewController(siteID string, allSiteIDs []string) *Controller {
 	clk := &clock.LamportClock{}
 	dir := NewSiteDirectory(allSiteIDs)
+
 	return &Controller{
 		Lamport:          clk,
 		Vector:           clock.NewVectorClock(len(allSiteIDs), dir.IDToIndex[siteID]),
@@ -64,6 +61,9 @@ func NewController(siteID string, allSiteIDs []string) *Controller {
 			Bilan:       0,
 			IsInitiator: false,
 		},
+		InputTorrentTransfers: make(map[string]chan<- torrentlogic.Message),
+		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
+		Register:              registre.NewRegistre(),               // TODO: voir avec Page si besoin d'initialiser des truc en plus
 	}
 }
 
