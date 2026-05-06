@@ -112,25 +112,44 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 	return parser.Message{}
 }
 
-// TODO: handleTorrent pour les messages de fichiers
-func (c *Controller) handleTorrent(pMsg parser.Message) {
+// handleTorrent pour les messages de fichiers
+func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
+	// Si action en lien avec la file répartie alors pas besoin de check le payload
+	switch pMsg.Action {
+	case string(torrentlogic.AskingFromSC):
+		log.Printf("[CONTROLLER] Redirection vers file repartie")
+		pMsg.Action = string(distributed_file.LOCAL_SC_REQUEST)
+		return c.handleDistributedFile(pMsg)
+	case string(torrentlogic.DoneWithSC):
+		log.Printf("[CONTROLLER] Redirection vers file repartie")
+		pMsg.Action = string(distributed_file.LOCAL_SC_LIBERATION)
+		return c.handleDistributedFile(pMsg)
+	}
+
 	// conversion du message Controle vers message torrent
 	msgTorrent, err := c.ParserMessageToTorrentMessage(pMsg)
 	if err != nil {
 		log.Printf("[CONTROLLER] Conversion message controler vers message torrent impossible: %v\n", err)
-		return
+		return parser.Message{}
 	}
 
 	switch pMsg.Action {
 	case string(torrentlogic.TransferRelatedMessage):
-		transfer, exist := c.TorrentTransfers[msgTorrent.TransferID]
-		if !exist {
-			inputChan := make(chan torrentlogic.Message, 100)
-			outputChan := make(chan torrentlogic.Message, 100)
-			go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, &c.Register, inputChan, outputChan)
+		{
+			transfer, exist := c.TorrentTransfers[msgTorrent.TransferID]
+			if !exist {
+				inputChan := make(chan torrentlogic.Message, 100)
+				outputChan := make(chan torrentlogic.Message, 100)
+				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, &c.Register, inputChan, outputChan)
+			}
+			transfer.Input <- msgTorrent
+			return parser.Message{}
 		}
-		transfer.Input <- msgTorrent
 
-		// TODO: voir avec Page que faire lors de la reception des messages de type AskingForShasum et AskingForContent
+	// TODO: voir avec Page que faire lors de la reception des messages de type AskingForShasum et AskingForContent
+	case string(torrentlogic.AskingForShasum):
+	case string(torrentlogic.AskingForContent):
 	}
+
+	return parser.Message{}
 }

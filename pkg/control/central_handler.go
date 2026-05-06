@@ -231,7 +231,7 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 		returnMsg = c.handleSnapshot(pMsg)
 	case string(torrentlogic.AskingFromSC), string(torrentlogic.DoneWithSC):
 		log.Printf("[CONTROLLER][LOCAL] Appel logique torrent\n")
-		c.handleTorrent(pMsg)
+		returnMsg = c.handleTorrent(pMsg)
 	default:
 		log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
 		return nil
