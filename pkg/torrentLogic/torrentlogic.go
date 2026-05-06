@@ -94,7 +94,7 @@ type Message struct {
 
 // Main function to start a transfer
 // It will then autonomously handle it until it's finished
-func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan int, outputMessagesChannel <-chan int) (success bool, error error) {
+func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, error error) {
 	fmt.Print("\nStarting transfer for file ID: ", fileID)
 	file := reg.GetFileByID(fileID)
 	if file == nil {
@@ -119,11 +119,11 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		receiving:              true,
 	}
 	// channel for communication between the transfers goroutine
-	transfersResultsChannel := make(chan int)
+	transfersResultsChannel := make(chan Message)
 	// WaitGroup for synchronizing the transfers goroutines
 	var wg sync.WaitGroup
 	// We make a tab of channels to transmit the messages to the goroutines
-	channelsForGoroutines := make([]chan int, file.NumberOfParts)
+	channelsForGoroutines := make([]chan Message, file.NumberOfParts)
 
 	for i := uint(0); i < file.NumberOfParts; i++ {
 		transfer.partsToAskIDs[i] = i
@@ -185,7 +185,7 @@ func PrintTransferStatus(transfer *ongoingTransfer) {
 	fmt.Printf("\nTransfer status for file %s\n Number of parts to send: %d\n Number of parts completed: %d\n Is receving ? : %t", transfer.file.Name, len(transfer.partsToAskIDs), transfer.numberOfPartsCompleted, transfer.receiving)
 }
 
-func StartTransferForPart(fileID string, partID uint, currentSite string, registre *registre.Registre, channelFin chan<- int, wg *sync.WaitGroup, incomingMessageChannel <-chan int) (err error) {
+func StartTransferForPart(fileID string, partID uint, currentSite string, registre *registre.Registre, channelFin chan<- int, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (err error) {
 	// number of peers having the part
 	numberOfPeersWithFilePart := len(registre.GetPeersHavingPart(fileID, partID))
 	// If none have it, we cannot start the transfer for this part, we log an error and return
@@ -235,7 +235,7 @@ func StartTransferForPart(fileID string, partID uint, currentSite string, regist
 
 }
 
-func AskPeerForPart(peerID string, fileID string, partID uint, wg *sync.WaitGroup) (success bool, err error) {
+func AskPeerForPart(peerID string, fileID string, partID uint, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, err error) {
 	fmt.Print("\nAsking peer ", peerID, " for part ", partID, " of file ", fileID)
 	/* transfer := PartTransfer{
 		partID:    partID,
@@ -246,7 +246,7 @@ func AskPeerForPart(peerID string, fileID string, partID uint, wg *sync.WaitGrou
 	// We send a message asking the peer for its shasum of the part
 	// If we have a valid response, we check if the shasum is correct, if not we log an error and return false
 	// If the shasum is correct, we ask the peer for the content of the part
-	// If we have a valid response, we check if the content is correct by comparing its shasum with the one we received before, if not we log an error and return false
+	// If we have a valid response, we check if the content is correct by comparing its shasum with the one we received before, if no we log an error and return false
 	// If the content is correct, we save it in the right folder and return true
 	return true, nil
 }
@@ -267,12 +267,24 @@ func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID st
 	return nil
 }
 
-func SendMessageToPeer(peerID string, message string) {
-	fmt.Printf("\nSending message to peer %s: %s", peerID, message)
-	//TODO
+func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, transferID string, targetID string, transferRelatedEvent TransferRelatedEvent, fileID string, partID uint, content string, outputMessagesChannel chan<- Message) {
+	message := Message{
+		messageType:          messageType,
+		deleteMe:             deleteMe,
+		senderID:             senderID,
+		transferID:           transferID,
+		targetID:             targetID,
+		transferRelatedEvent: transferRelatedEvent,
+		fileID:               fileID,
+		partID:               partID,
+		content:              content,
+	}
+	fmt.Printf("\nMessage details:\n Type: %s\n Sender: %s\n Target: %s\n Content: %s", messageName[message.messageType], message.senderID, message.targetID, message.content)
+	outputMessagesChannel <- message
+
 }
 
-func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID string, partID uint, reg *registre.Registre) (err error) {
+func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID string, partID uint, reg *registre.Registre, outputMessagesChannel chan<- Message) (err error) {
 	fmt.Printf("\nPeer %s is asking for the content of part %d of file %s", peerID, partID, fileID)
 	// We check locally if we can find the part in our local storage
 	// We get the file name
