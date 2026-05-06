@@ -3,6 +3,7 @@ package event_loop
 import (
 	"HomemadeTorrent/pkg/control"
 	userInput "HomemadeTorrent/pkg/user_input"
+	"HomemadeTorrent/pkg/webui"
 	"bufio"
 	"fmt"
 	"log"
@@ -46,6 +47,18 @@ func Start(allSiteIDs []string, siteID string) {
 	go listenStdEntry(eventQueue)
 	go listenUserInput(eventQueue, siteID)
 	go siteLogic(processingChan, eventQueue, controler)
+
+	// interface web
+	go func() {
+		onMsg := func(msg string) {
+			eventQueue <- Event{
+				Type:   ReadMessage,
+				Source: FromLocalUser,
+				Data:   msg,
+			}
+		}
+		webui.StartWebUI(siteID, controler.SiteIndex, onMsg, controler.Reg)
+	}()
 
 	log.Printf("[EVENT_LOOP] START\n")
 
