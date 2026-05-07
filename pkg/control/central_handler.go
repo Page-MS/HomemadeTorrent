@@ -222,6 +222,10 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 		return nil
 	}
 
+	if len(returnMsg.Vect) == 0 {
+		returnMsg.Vect = make([]int, len(c.NetworkDirectory.IndexToID))
+	}
+
 	encodedMsg, err := parser.Encode(returnMsg)
 	if err != nil {
 		log.Printf("[CONTROLLER][LOCAL] Erreur encodage pour réseau: %v\n", err)

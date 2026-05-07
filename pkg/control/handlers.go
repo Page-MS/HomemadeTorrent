@@ -72,7 +72,7 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 			log.Printf("[SNAPSHOT] Premier MARKER reçu de %s. Clic !", pMsg.Sender)
 
 			// On détermine si on est l'initiateur global (reçu de l'extérieur)
-			isGlobalInitiator := pMsg.Sender == "EXTERNAL" // TODO : surement à enlever quand on enverra le message de déclenechement en local
+			isGlobalInitiator := pMsg.Sender == "USER"
 
 			// On définit l'ID de l'initiateur (soit nous, soit celui qui nous l'envoie)
 			initiatorID := pMsg.Sender
