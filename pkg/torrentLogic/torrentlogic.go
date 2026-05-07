@@ -28,12 +28,14 @@ const (
 	AskingForContent
 )
 
+// Possible types of messages that can be received that the controller should just pass to the transfer without looking into it
 const (
 	None TransferRelatedEvent = iota
 	ReceivingShasum
 	ReceivingContent
 )
 
+// All possibles states of a transfer
 const (
 	StateNotStarted PartTransferStatus = iota
 	StateError
@@ -45,6 +47,7 @@ const (
 	StateCompleted
 )
 
+// Messages types
 var messageName = map[MessageType]string{
 	AskingFromSC:           "Asking for a critical section",
 	DoneWithSC:             "Done with critical section",
@@ -53,6 +56,7 @@ var messageName = map[MessageType]string{
 	AskingForContent:       "Asking for the content of a part",
 }
 
+// Strings for transfer states
 var stateName = map[PartTransferStatus]string{
 	StateNotStarted:           "not started",
 	StateError:                "error",
@@ -81,8 +85,6 @@ type ongoingTransfer struct {
 	receiving              bool
 }
 
-// TODO type for message
-
 type Message struct {
 	messageType          MessageType
 	deleteMe             bool
@@ -96,7 +98,7 @@ type Message struct {
 }
 
 // Main function to start a transfer
-// It will then autonomously handle it until it's finished
+// It will then autonomously handle it until it's finished or fails
 func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, error error) {
 	fmt.Print("\nStarting transfer for file ID: ", fileID)
 	file := reg.GetFileByID(fileID)
@@ -172,6 +174,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	return true, nil
 }
 
+// Util function
 func removeElementFromIntSlice(slice []uint, element uint) []uint {
 	newSlice := make([]uint, 0)
 	for _, e := range slice {
@@ -183,6 +186,7 @@ func removeElementFromIntSlice(slice []uint, element uint) []uint {
 
 }
 
+// Util function
 func removeElementFromStringSlice(slice []string, element string) []string {
 	newSlice := make([]string, 0)
 	for _, e := range slice {
@@ -193,10 +197,12 @@ func removeElementFromStringSlice(slice []string, element string) []string {
 	return newSlice
 
 }
+
 func PrintTransferStatus(transfer *ongoingTransfer) {
 	fmt.Printf("\nTransfer status for file %s\n Number of parts to send: %d\n Number of parts completed: %d\n Is receving ? : %t", transfer.file.Name, len(transfer.partsToAskIDs), transfer.numberOfPartsCompleted, transfer.receiving)
 }
 
+// Handle the transfer for asking a single part of a file, use a channel to indicate its success and ID
 func StartTransferForPart(transferID string, fileID string, partID uint, currentSite string, registre *registre.Registre, channelFin chan<- uint, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (err error) {
 	// number of peers having the part
 	numberOfPeersWithFilePart := len(registre.GetPeersHavingPart(fileID, partID))
@@ -247,6 +253,7 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 
 }
 
+// Ask a peer for a file part, timeout if unsuccessful
 func AskPeerForPart(transferID string, peerID string, fileID string, partID uint, currentSite string, reg *registre.Registre, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, err error) {
 	fmt.Print("\nAsking peer ", peerID, " for part ", partID, " of file ", fileID)
 	// Send message asking for shasum
@@ -293,6 +300,7 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 	return true, nil
 }
 
+// Function called by the controller to answer a request without launching a full transfer
 func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID string, partID uint, reg *registre.Registre, outputMessagesChannel chan<- Message) (err error) {
 	fmt.Printf("\nPeer %s is asking if we have part %d of file %s", peerID, partID, fileID)
 	// We check locally if we can find the part in our local storage
@@ -309,6 +317,7 @@ func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID st
 	return nil
 }
 
+// Util function to send a message
 func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, transferID string, targetID string, transferRelatedEvent TransferRelatedEvent, fileID string, partID uint, content string, outputMessagesChannel chan<- Message) {
 	message := Message{
 		messageType:          messageType,
@@ -326,11 +335,11 @@ func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, 
 
 }
 
+// Function called by the controller to answer a request without launching a full transfer
 func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID string, partID uint, reg *registre.Registre, outputMessagesChannel chan<- Message) (err error) {
 	fmt.Printf("\nPeer %s is asking for the content of part %d of file %s", peerID, partID, fileID)
 	// We check locally if we can find the part in our local storage
 	// We get the file name
-
 	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "./bin")
 	if err != nil {
 		return err
@@ -354,6 +363,7 @@ func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID 
 	return nil
 }
 
+// Compare the shasum of the file received and the one expected in the register
 func HandlePeerRespondingWithShasum(currentSiteID string, peerID string, fileID string, partID uint, shasum string, reg *registre.Registre) (err error) {
 	fmt.Printf("\nPeer %s is responding with shasum for part %d of file %s: %s", peerID, partID, fileID, shasum)
 	// We check if the shasum is correct by comparing it with the shasum of the part we have in in the register
