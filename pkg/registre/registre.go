@@ -530,3 +530,27 @@ func CleanUpPartsDirectory() {
 		}
 	}
 }
+
+func ConvertRegisterToString(registre *Registre) string {
+	var sb strings.Builder
+	for _, file := range registre.files {
+		sb.WriteString(fmt.Sprintf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.Name, file.ID, file.size, file.NumberOfParts))
+		for _, peer := range file.PeersThatHaveFileID {
+			sb.WriteString(fmt.Sprintf("\tPeer that has the file: %s\n", peer))
+		}
+		for _, part := range file.FileParts {
+			sb.WriteString(fmt.Sprintf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.filePartID, part.filePartSize, part.filePartShasum))
+			for _, peer := range part.peersThatHaveFilePartID {
+				sb.WriteString(fmt.Sprintf("\tPeer that has the file part: %s\n", peer))
+			}
+		}
+	}
+	return sb.String()
+}
+
+func convertStringToRegister(stringFormatedRegister string) *Registre {
+	registre := NewRegistre()
+
+	// TODO
+	return registre
+}

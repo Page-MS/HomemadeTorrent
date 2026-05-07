@@ -22,10 +22,12 @@ type TransferRelatedEvent int
 const CONNEXION_TIMEOUT = 10 * time.Second
 const (
 	AskingFromSC MessageType = iota
+	InitiateSC
 	DoneWithSC
 	TransferRelatedMessage
 	AskingForShasum
 	AskingForContent
+	RegisterModification
 )
 
 // Possible types of messages that can be received that the controller should just pass to the transfer without looking into it
@@ -50,10 +52,12 @@ const (
 // Messages types
 var messageName = map[MessageType]string{
 	AskingFromSC:           "Asking for a critical section",
+	InitiateSC:             "Critical section beginning", // Have been accepted by the controller
 	DoneWithSC:             "Done with critical section",
 	TransferRelatedMessage: "Message related to a transfer", // the controller doesn't have to look into it when sending it
 	AskingForShasum:        "Asking for the shasum of a part",
 	AskingForContent:       "Asking for the content of a part",
+	RegisterModification:   "Modification of the shared register",
 }
 
 // Strings for transfer states
@@ -90,7 +94,7 @@ type Message struct {
 	deleteMe             bool
 	senderID             string
 	transferID           string
-	targetID             string
+	targetID             string // "" is a broadcast (can be changed if you have another convention)
 	transferRelatedEvent TransferRelatedEvent
 	fileID               string
 	partID               uint
@@ -203,9 +207,9 @@ func PrintTransferStatus(transfer *ongoingTransfer) {
 }
 
 // Handle the transfer for asking a single part of a file, use a channel to indicate its success and ID
-func StartTransferForPart(transferID string, fileID string, partID uint, currentSite string, registre *registre.Registre, channelFin chan<- uint, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (err error) {
+func StartTransferForPart(transferID string, fileID string, partID uint, currentSite string, reg *registre.Registre, channelFin chan<- uint, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (err error) {
 	// number of peers having the part
-	numberOfPeersWithFilePart := len(registre.GetPeersHavingPart(fileID, partID))
+	numberOfPeersWithFilePart := len(reg.GetPeersHavingPart(fileID, partID))
 	// If none have it, we cannot start the transfer for this part, we log an error and return
 	if numberOfPeersWithFilePart == 0 {
 		fmt.Printf("\nNo peer has part %d of file %s, cannot start transfer for this part", partID, fileID)
@@ -216,11 +220,11 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 	}
 	fmt.Printf("\nStarting transfer for part %d of file %s, number of peers having this part: %d", partID, fileID, numberOfPeersWithFilePart)
 	// We take a random peer in the list of peers to not always ask the same peer first
-	peersWithPart := registre.GetPeersHavingPart(fileID, partID)
+	peersWithPart := reg.GetPeersHavingPart(fileID, partID)
 	peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
 	fmt.Printf("\nAsking peer %s for part %d of file %s", peerToAsk, partID, fileID)
 	var partTransferWg sync.WaitGroup
-	transferSuccess, err := AskPeerForPart(transferID, peerToAsk, fileID, partID, currentSite, registre, &partTransferWg, incomingMessagesChannel, outputMessagesChannel)
+	transferSuccess, err := AskPeerForPart(transferID, peerToAsk, fileID, partID, currentSite, reg, &partTransferWg, incomingMessagesChannel, outputMessagesChannel)
 	if err != nil {
 		fmt.Printf("\nError while asking peer %s for part %d of file %s: %v", peerToAsk, partID, fileID, err)
 		channelFin <- partID
@@ -239,12 +243,34 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 			return err
 		}
 		peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
-		transferSuccess, err = AskPeerForPart(transferID, peerToAsk, fileID, partID, currentSite, registre, &partTransferWg, incomingMessagesChannel, outputMessagesChannel)
+		transferSuccess, err = AskPeerForPart(transferID, peerToAsk, fileID, partID, currentSite, reg, &partTransferWg, incomingMessagesChannel, outputMessagesChannel)
 		if err != nil {
 			return err
 		}
 	}
 	fmt.Printf("\nTransfer for part %d of file %s from peer %s succeeded !", partID, fileID, peerToAsk)
+	// We ask for a critical section to update the shared register
+	timeout := false
+	go func() {
+		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "", None, fileID, partID, "", outputMessagesChannel)
+		select {
+		case messageReceived := <-incomingMessagesChannel:
+			// If we are allowed to have the critical section
+			if messageReceived.messageType == InitiateSC {
+				// We send a broadcast message of modification
+				SendMessageToPeer(RegisterModification, false, currentSite, transferID, "", None, fileID, partID, registre.ConvertRegisterToString(reg), outputMessagesChannel)
+			}
+		case <-time.After(CONNEXION_TIMEOUT * 10):
+			timeout = true
+		}
+	}()
+	if timeout == true {
+		fmt.Print("\n SC obtention failed")
+		return err
+	}
+	// We add ourself as owner of the file part in our own local register
+	SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "", None, fileID, partID, "", outputMessagesChannel)
+	partTransferWg.Done()
 
 	channelFin <- partID
 	wg.Done()
