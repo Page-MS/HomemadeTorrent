@@ -1,6 +1,7 @@
 package control
 
 import (
+	"HomemadeTorrent/pkg/registre"
 	"HomemadeTorrent/pkg/snapshot"
 	"log"
 
@@ -64,36 +65,72 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 		return pMsg
 	}
 
-	// Si on reçoit un MARKER et qu'on est blanc, on devient initiateur
-	if pMsg.Action == snapshot.MARKER && c.Snapshot.MyColor == snapshot.White {
-		log.Printf("[SNAPSHOT] Déclenchement initié par MARKER réseau.")
-		c.triggerLocalSnapshot(true)
-		pMsg.Sender = c.SiteID
-		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
-		pMsg.Color = string(snapshot.Red)
-		pMsg.Vect = c.Vector.GetCopy()
-		pMsg.Stamp = c.Lamport.GetValue()
-		return pMsg
-	}
+	if pMsg.Action == snapshot.MARKER {
 
-	if !c.Snapshot.IsInitiator {
-		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
-		pMsg.Vect = c.Vector.GetCopy()
-		pMsg.Stamp = c.Lamport.GetValue()
-		return pMsg
+		// on est BLANC (Premier Marker reçu)
+		if c.Snapshot.MyColor == snapshot.White {
+			log.Printf("[SNAPSHOT] Premier MARKER reçu de %s. Clic !", pMsg.Sender)
+
+			// On détermine si on est l'initiateur global (reçu de l'extérieur)
+			isGlobalInitiator := pMsg.Sender == "EXTERNAL" // TODO : surement à enlever quand on enverra le message de déclenechement en local
+
+			// On définit l'ID de l'initiateur (soit nous, soit celui qui nous l'envoie)
+			initiatorID := pMsg.Sender
+			if isGlobalInitiator {
+				initiatorID = c.SiteID
+			}
+
+			// Action de Snapshot (Sauvegarde + Envoi de l'état si on n'est pas l'initiateur)
+			c.triggerLocalSnapshot(isGlobalInitiator, c.getSiteIndexFromID(initiatorID))
+
+			// On prépare le Marker pour le voisin suivant
+			pMsg.Sender = initiatorID // On garde l'ID du vrai initiateur
+			pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+			pMsg.Color = string(snapshot.Red)
+
+			return pMsg // On envoie le Marker au suivant
+		}
+
+		// On est déjà ROUGE (Le Marker a fait le tour ou arrive par un autre canal)
+		if c.Snapshot.MyColor == snapshot.Red {
+			if c.Snapshot.IsInitiator {
+				log.Printf("[SNAPSHOT] Marker revenu à l'initiateur. Fin.")
+				return parser.Message{} // L'initiateur arrête la boucle
+			} else {
+				log.Printf("[SNAPSHOT] Marker reçu alors que déjà rouge. Propagation simple.")
+				pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+				return pMsg // On laisse le Marker finir son tour d'anneau
+			}
+		}
 	}
 
 	switch pMsg.Action {
 	case snapshot.STATE_COLLECT:
 		c.Snapshot.NbEtatsAttendus--
 		c.Snapshot.NbMsgAttendus += pMsg.Bilan
-		// TODO : c.Snapshot.CollectedStates = append(registre serialiser dans payload)
+		distantReg := &registre.Registre{}
+
+		// 2. Décoder la string JSON reçue dans le payload
+		err := distantReg.FromJSON(pMsg.Payload)
+		if err != nil {
+			log.Printf("[SNAPSHOT][ERROR] Désérialisation de %s: %v", pMsg.Sender, err)
+		}
+		remoteState := snapshot.SiteState{
+			SiteID:   pMsg.Sender,
+			Register: *distantReg,
+			Vector:   pMsg.Vect,
+		}
+		c.Snapshot.CollectedStates = append(c.Snapshot.CollectedStates, remoteState)
 		log.Printf("[SNAPSHOT] État reçu de %s (Bilan: %d). Attente de %d messages restants.", pMsg.Sender, pMsg.Bilan, c.Snapshot.NbMsgAttendus)
 
 	case snapshot.PREPOST_COLLECT:
 		if c.Snapshot.NbEtatsAttendus > 0 || c.Snapshot.NbMsgAttendus > 0 {
 			c.Snapshot.NbMsgAttendus--
-			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, pMsg.Payload)
+			raw, err := parser.Encode(pMsg)
+			if err != nil {
+				log.Printf("[SNPASHOT][PREPOST_COLLECT] Erreur encodage du message PREPOST_COLLECT: %v\n", err)
+			}
+			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, raw)
 			log.Printf("[SNAPSHOT] Message en vol archivé. Restant : %d", c.Snapshot.NbMsgAttendus)
 
 		} else {

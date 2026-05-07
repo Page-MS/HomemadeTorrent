@@ -130,7 +130,9 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	// Si on reçoit rouge alors qu'on est blanc on peut notre instantané avant de traiter le message.
 	if pMsg.Color == string(snapshot.Red) && c.Snapshot.MyColor == snapshot.White {
 		log.Printf("[SNAPSHOT] Lestage détecté (Msg ROUGE sur Site BLANC). Clic forcé.")
-		msgSnapshot := c.triggerLocalSnapshot(false)
+		initiatorID := pMsg.Sender
+
+		msgSnapshot := c.triggerLocalSnapshot(false, c.getSiteIndexFromID(initiatorID))
 		if msgSnapshot != "" {
 			responses = append(responses, msgSnapshot)
 		}
