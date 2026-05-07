@@ -16,9 +16,15 @@ const (
 	RESET_SNAPSHOT  string = "RESET_SNAPSHOT"
 )
 
+type SiteState struct {
+	SiteID   string
+	Register registre.Registre
+	Vector   []int
+}
 type Snapshot struct {
 	MyColor     Color
 	IsInitiator bool
+	InitiatorID int
 	Bilan       int // émis - reçus (préclic)
 
 	// snapshot
@@ -27,8 +33,15 @@ type Snapshot struct {
 
 	NbEtatsAttendus   int
 	NbMsgAttendus     int
-	CollectedStates   []registre.Registre
+	CollectedStates   []SiteState
 	CollectedPreposts []string
+}
+
+// Structure finale pour le fichier JSON
+type GlobalSnapshot struct {
+	SnapshotID        string      `json:"snapshot_id"`
+	CollectedStates   []SiteState `json:"sites_states"`
+	CollectedPreposts []string    `json:"prepost_messages"`
 }
 
 func (s *Snapshot) SetRed() {
