@@ -3,10 +3,13 @@ package control
 import (
 	"HomemadeTorrent/pkg/registre"
 	"HomemadeTorrent/pkg/snapshot"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
 
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
+
+	"github.com/google/uuid"
 )
 
 // handleDistributedFile fait le lien avec distributed_file.go
@@ -148,7 +151,60 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 	return parser.Message{}
 }
 
-// TODO: handleTorrent pour les messages de fichiers
-func (c *Controller) handleTorrent(pMsg parser.Message) {
-	log.Printf("[TORRENT] Traitement de la pièce %d pour l'objet %s", pMsg.Chunk, pMsg.Object)
+// handleTorrent pour les messages de fichiers
+func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
+	// Si action en lien avec la file répartie alors pas besoin de check le payload
+	switch pMsg.Action {
+	case string(torrentlogic.AskingFromSC):
+		log.Printf("[CONTROLLER] Redirection vers file repartie")
+		pMsg.Action = string(distributed_file.LOCAL_SC_REQUEST)
+		return c.handleDistributedFile(pMsg)
+	case string(torrentlogic.DoneWithSC):
+		log.Printf("[CONTROLLER] Redirection vers file repartie")
+		pMsg.Action = string(distributed_file.LOCAL_SC_LIBERATION)
+		return c.handleDistributedFile(pMsg)
+	}
+
+	// conversion du message Controle vers message torrent
+	msgTorrent, err := c.ParserMessageToTorrentMessage(pMsg)
+	if err != nil {
+		log.Printf("[CONTROLLER] Conversion message controler vers message torrent impossible: %v\n", err)
+		return parser.Message{}
+	}
+
+	switch pMsg.Action {
+	case string(torrentlogic.TransferRelatedMessage):
+		{
+			if len(msgTorrent.TransferID) == 0 {
+				msgTorrent.TransferID = uuid.NewString()
+			}
+
+			// TODO: Voir avec Page quand delete la go-routine (deleteme?)
+			inputChan, exist := c.InputTorrentTransfers[msgTorrent.TransferID]
+			if !exist {
+				inputChan = make(chan torrentlogic.Message, 100)
+				c.InputTorrentTransfers[msgTorrent.TransferID] = inputChan
+				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Register, inputChan, c.OutputTorrentChan)
+			}
+			inputChan <- msgTorrent
+			return parser.Message{}
+		}
+
+	// Demande si un fichier existe
+	case string(torrentlogic.AskingForShasum):
+		{
+			go torrentlogic.HandlePeerAskingIfWeHavePart(c.SiteID, msgTorrent.SenderID, msgTorrent.FileID, msgTorrent.PartID, c.Register)
+		}
+
+	case string(torrentlogic.AskingForContent):
+		torrentlogic.HandlePeerAskingForPartContent(
+			c.SiteID,
+			msgTorrent.SenderID,
+			msgTorrent.FileID,
+			msgTorrent.PartID,
+			c.Register,
+		)
+	}
+
+	return parser.Message{}
 }

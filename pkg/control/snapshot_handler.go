@@ -4,6 +4,7 @@ import (
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
 	"HomemadeTorrent/pkg/snapshot"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -125,7 +126,8 @@ func (c *Controller) getSuccessorIndex() int {
 // Fonction utilitaire pour savoir si le message impacte le bilan pour snapshot
 func isApplicationMessage(action string) bool {
 	// Les messages Torrent impactent le bilan, les messages de contrôle non
-	return action == "GET_PART" || action == "SEND_PART"
+	_, exists := torrentMessagesMap[torrentlogic.MessageType(action)]
+	return exists
 }
 
 // finalizeSnapshot conclut l'algorithme de lestage

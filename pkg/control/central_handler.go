@@ -2,6 +2,7 @@ package control
 
 import (
 	"HomemadeTorrent/pkg/snapshot"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
 	"sort"
 
@@ -17,24 +18,36 @@ type SiteDirectory struct {
 }
 
 type Controller struct {
-	Lamport          *clock.LamportClock
-	Vector           *clock.VectorClock
-	DistFile         *distributed_file.DistributedFile
-	Reg              *registre.Registre
-	SiteID           string          // nom du site
-	SiteIndex        int             // index du site
-	SeenMessages     map[string]bool // Messages déjà vu par le site
-	NetworkDirectory SiteDirectory   // Correspondance SiteId et index
-	Snapshot         *snapshot.Snapshot
+	Lamport               *clock.LamportClock
+	Vector                *clock.VectorClock
+	DistFile              *distributed_file.DistributedFile
+	Reg                   *registre.Registre
+	SiteID                string          // nom du site
+	SiteIndex             int             // index du site
+	SeenMessages          map[string]bool // Messages déjà vu par le site
+	NetworkDirectory      SiteDirectory   // Correspondance SiteId et index
+	Snapshot              *snapshot.Snapshot
+	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
+	OutputTorrentChan     chan torrentlogic.Message
+	Register              *registre.Registre
 }
 
 // Adapter cette valeur en focntion de la convention choisie
 const BROADCAST string = "-1"
 
+var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
+	torrentlogic.AskingFromSC:           {},
+	torrentlogic.DoneWithSC:             {},
+	torrentlogic.TransferRelatedMessage: {},
+	torrentlogic.AskingForShasum:        {},
+	torrentlogic.AskingForContent:       {},
+}
+
 // NewController initialise un nouveau dispatcher central
-func NewController(siteID string, allSiteIDs []string) *Controller {
+func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Controller {
 	clk := &clock.LamportClock{}
 	dir := NewSiteDirectory(allSiteIDs)
+
 	return &Controller{
 		Lamport:          clk,
 		Vector:           clock.NewVectorClock(len(allSiteIDs), dir.IDToIndex[siteID]),
@@ -48,6 +61,9 @@ func NewController(siteID string, allSiteIDs []string) *Controller {
 			Bilan:       0,
 			IsInitiator: false,
 		},
+		InputTorrentTransfers: make(map[string]chan torrentlogic.Message),
+		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
+		Register:              r,
 	}
 }
 
@@ -165,9 +181,8 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		returnMsg = c.handleSnapshot(pMsg)
 
 	// logique du torrent
-	// TODO: remplacer par les constantes des actions Torrent et logique de gestion
-	case "GET_PART", "SEND_PART":
-		log.Printf("[CONTROLLER] Appel logique torrent\n")
+	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.AskingForContent), string(torrentlogic.AskingForShasum):
+		log.Printf("[CONTROLLER][NETWORK] Appel logique torrent\n")
 		c.handleTorrent(pMsg)
 
 	default:
@@ -188,7 +203,6 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	return append(responses, pString)
 }
 
-// TODO: HandleIncomingFromLocal gère les demande venant de l'app Torrent
 func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	var responses []string
 	pMsg, err := parser.Decode(raw)
@@ -217,10 +231,18 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	case snapshot.MARKER:
 		log.Printf("[CONTROLLER][LOCAL] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
+	case string(torrentlogic.AskingFromSC), string(torrentlogic.DoneWithSC):
+		log.Printf("[CONTROLLER][LOCAL] Appel logique torrent\n")
+		returnMsg = c.handleTorrent(pMsg)
 	default:
-		log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
-		return nil
-	}
+		if isApplicationMessage(pMsg.Action) {
+			// Message destiné à l'extérieur
+			returnMsg = pMsg
+		} else {
+			log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
+			return nil
+		}
+  }
 
 	if len(returnMsg.Vect) == 0 {
 		returnMsg.Vect = make([]int, len(c.NetworkDirectory.IndexToID))

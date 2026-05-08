@@ -3,6 +3,7 @@ package control
 import (
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"fmt"
 )
 
@@ -26,5 +27,32 @@ func (c *Controller) FileMessageToParserMessage(fMsg distributed_file.Message) (
 		Vect:   c.Vector.GetCopy(),
 		Dest:   c.getIdFromSIteIndex(fMsg.IndexDest),
 		Sender: c.getIdFromSIteIndex(fMsg.IndexSender),
+	}, nil
+}
+
+func (c *Controller) ParserMessageToTorrentMessage(pMsg parser.Message) (torrentlogic.Message, error) {
+	if pMsg.Payload == "" {
+		return torrentlogic.Message{}, fmt.Errorf("[MAPPER] Payload vide, impossible de convertir en un message torrent\n")
+	}
+	torrentMsgType, err := parser.DecodeTorrentPayload(pMsg.Payload)
+	if err != nil {
+		return torrentlogic.Message{}, fmt.Errorf("[MAPPER] Impossible de décoder le payload torrent: %v\n", err)
+	}
+	return torrentMsgType, nil
+}
+
+func (c *Controller) TorrentMessageToParserMessage(tMsg torrentlogic.Message) (parser.Message, error) {
+	payload, err := parser.EncodeTorrentPayload(tMsg)
+	if err != nil {
+		return parser.Message{}, fmt.Errorf("[MAPPER] Impossible d'encoder le payload torrent: %v", err)
+	}
+
+	return parser.Message{
+		Action:  string(tMsg.MessageType),
+		Stamp:   c.Lamport.GetValue(),
+		Vect:    c.Vector.GetCopy(),
+		Dest:    tMsg.TargetID,
+		Sender:  c.SiteID,
+		Payload: payload,
 	}, nil
 }
