@@ -137,7 +137,6 @@ func listenUserInput(queue chan<- Event, siteID string) {
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
 	for msg := range c.OutputTorrentChan {
-		log.Printf("[EVENT_LOOP] Message torrent output: %v\n", msg)
 		ctrlMsg, err := c.TorrentMessageToParserMessage(msg)
 		if err != nil {
 			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
@@ -146,7 +145,7 @@ func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
 		if err != nil {
 			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
 		}
-		log.Printf("[EVENT_LOOP] Message str torrent output: %s\n", strMsg)
+
 		queue <- Event{
 			Type:   ReadMessage,
 			Source: FromLocalUser,
