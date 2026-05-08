@@ -173,7 +173,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 	}
 
 	switch pMsg.Action {
-	case string(torrentlogic.TransferRelatedMessage):
+	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.StartTransfers):
 		{
 			if len(msgTorrent.TransferID) == 0 {
 				msgTorrent.TransferID = uuid.NewString()
@@ -193,7 +193,14 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 	// Demande si un fichier existe
 	case string(torrentlogic.AskingForShasum):
 		{
-			go torrentlogic.HandlePeerAskingIfWeHavePart(c.SiteID, msgTorrent.SenderID, msgTorrent.FileID, msgTorrent.PartID, c.Register)
+			go torrentlogic.HandlePeerAskingIfWeHavePart(
+				c.SiteID,
+				msgTorrent.SenderID,
+				msgTorrent.FileID,
+				msgTorrent.PartID,
+				c.Register,
+				c.OutputTorrentChan,
+			)
 		}
 
 	case string(torrentlogic.AskingForContent):
@@ -203,6 +210,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			msgTorrent.FileID,
 			msgTorrent.PartID,
 			c.Register,
+			c.OutputTorrentChan,
 		)
 	}
 

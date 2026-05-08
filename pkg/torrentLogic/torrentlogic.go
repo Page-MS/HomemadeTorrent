@@ -24,6 +24,7 @@ const (
 	AskingFromSC           MessageType = "AskingFromSC"
 	DoneWithSC             MessageType = "DoneWithSC"
 	TransferRelatedMessage MessageType = "TransferRelatedMessage"
+	StartTransfers         MessageType = "StartTransfers"
 	AskingForShasum        MessageType = "AskingForShasum"
 	AskingForContent       MessageType = "AskingForContent"
 )
@@ -99,7 +100,7 @@ type Message struct {
 
 // Main function to start a transfer
 // It will then autonomously handle it until it's finished
-func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel <-chan Message) (success bool, error error) {
+func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, error error) {
 	fmt.Print("\nStarting transfer for file ID: ", fileID)
 	file := reg.GetFileByID(fileID)
 	if file == nil {
@@ -139,8 +140,8 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	// Goroutine to dispatch incoming messages to the corresponding part goroutine
 	go func() {
 		for msg := range incomingMessagesChannel {
-			if msg.partID < file.NumberOfParts {
-				partIncomingChannels[msg.partID] <- msg
+			if msg.PartID < file.NumberOfParts {
+				partIncomingChannels[msg.PartID] <- msg
 			}
 		}
 	}()
@@ -268,10 +269,10 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 		return false, nil
 	}
 	msg := <-incomingMessagesChannel
-	if msg.transferRelatedEvent != ReceivingShasum || msg.partID != partID || msg.fileID != fileID {
+	if msg.TransferRelatedEvent != ReceivingShasum || msg.PartID != partID || msg.FileID != fileID {
 		return false, fmt.Errorf("unexpected message: %+v", msg)
 	}
-	shasum := msg.content
+	shasum := msg.Content
 	// Check shasum
 	err = HandlePeerRespondingWithShasum(currentSite, peerID, fileID, partID, shasum, reg)
 	if err != nil {
@@ -288,10 +289,10 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 		return false, nil
 	}
 	msg = <-incomingMessagesChannel
-	if msg.transferRelatedEvent != ReceivingContent || msg.partID != partID || msg.fileID != fileID {
+	if msg.TransferRelatedEvent != ReceivingContent || msg.PartID != partID || msg.FileID != fileID {
 		return false, fmt.Errorf("unexpected message: %+v", msg)
 	}
-	content := msg.content
+	content := msg.Content
 	// Save content to file
 	err = os.WriteFile(fmt.Sprintf("bin/%s/parts/%s_%d", currentSite, fileID, partID), []byte(content), 0644)
 	if err != nil {
@@ -320,17 +321,17 @@ func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID st
 // Util function to send a message
 func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, transferID string, targetID string, transferRelatedEvent TransferRelatedEvent, fileID string, partID uint, content string, outputMessagesChannel chan<- Message) {
 	message := Message{
-		messageType:          messageType,
-		deleteMe:             deleteMe,
-		senderID:             senderID,
-		transferID:           transferID,
-		targetID:             targetID,
-		transferRelatedEvent: transferRelatedEvent,
-		fileID:               fileID,
-		partID:               partID,
-		content:              content,
+		MessageType:          messageType,
+		DeleteMe:             deleteMe,
+		SenderID:             senderID,
+		TransferID:           transferID,
+		TargetID:             targetID,
+		TransferRelatedEvent: transferRelatedEvent,
+		FileID:               fileID,
+		PartID:               partID,
+		Content:              content,
 	}
-	fmt.Printf("\nMessage details:\n Type: %s\n Sender: %s\n Target: %s\n Content: %s", messageName[message.messageType], message.senderID, message.targetID, message.content)
+	fmt.Printf("\nMessage details:\n Type: %s\n Sender: %s\n Target: %s\n Content: %s", messageName[message.MessageType], message.SenderID, message.TargetID, message.Content)
 	outputMessagesChannel <- message
 
 }

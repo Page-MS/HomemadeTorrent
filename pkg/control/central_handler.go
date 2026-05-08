@@ -231,7 +231,7 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	case snapshot.MARKER:
 		log.Printf("[CONTROLLER][LOCAL] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
-	case string(torrentlogic.AskingFromSC), string(torrentlogic.DoneWithSC):
+	case string(torrentlogic.AskingFromSC), string(torrentlogic.DoneWithSC), string(torrentlogic.StartTransfers):
 		log.Printf("[CONTROLLER][LOCAL] Appel logique torrent\n")
 		returnMsg = c.handleTorrent(pMsg)
 	default:
@@ -242,12 +242,15 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 			log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
 			return nil
 		}
-  }
+	}
 
 	if len(returnMsg.Vect) == 0 {
 		returnMsg.Vect = make([]int, len(c.NetworkDirectory.IndexToID))
 	}
 
+	if returnMsg.Action == "" {
+		return responses
+	}
 	encodedMsg, err := parser.Encode(returnMsg)
 	if err != nil {
 		log.Printf("[CONTROLLER][LOCAL] Erreur encodage pour réseau: %v\n", err)
