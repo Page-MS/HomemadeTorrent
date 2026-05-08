@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Torrent Node: {{.SiteID}}</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/main.js"></script>
     <script>
         window.siteInfo = {
             siteId: {{.SiteID}}
@@ -19,16 +18,17 @@
         <h1 class="text-2xl border-b-2 border-stone-800 pb-2 mb-0">Node: {{.SiteID}} <span
                 class="font-normal text-sm text-stone-500">(Port: {{.Port}})</span></h1>
 
-        <div class="flex flex-wrap gap-5 mt-5">
+        <div class="grid grid-cols-2 gap-5 mt-5">
             <div class="flex-1 min-w-[300px] border border-stone-300 p-4 bg-stone-100">
-                <h2 class="text-lg mt-0 border-b border-dashed border-stone-300 pb-1 mb-3">Register Information</h2>
-                <div id="register-info">
+                <h2 class="w-full text-lg mt-0 border-b border-dashed border-stone-300 pb-1 mb-3">
+                    Register Information
+                    <span class="ml-auto text-xs text-stone-700">
+                        (auto refresh)
+                    </span>
+                </h2>
+                <div id="register-info" class=" max-h-96 overflow-auto">
                     <p class="italic text-stone-600">Loading register info...</p>
                 </div>
-                <button onclick="fetchInfo()"
-                    class="mt-3 bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
-                    [ Refresh ]
-                </button>
             </div>
 
             <div class="flex-1 min-w-[300px] border border-stone-300 p-4 bg-stone-100">
@@ -72,10 +72,22 @@ SENDER:USER
                     [ START SNAPSHOT ]
                 </button>
             </div>
+
+            <div class="col-span-2">
+                <h2 class="text-lg mt-0 border-b border-dashed border-stone-300 pb-1 mb-3">
+                    Logs:
+                </h2>
+                <div id="logs">
+                </div>
+            </div>
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import {fetchInfo} from "/main.js";
+
+        fetchInfo();
+
         function updateStatus(msg, isError = false) {
             const statusEl = document.getElementById('status');
             statusEl.textContent = msg;
@@ -89,47 +101,6 @@ SENDER:USER
             setTimeout(() => {
                 statusEl.className = 'hidden';
             }, 3000);
-        }
-
-        async function fetchInfo() {
-            const container = document.getElementById('register-info');
-            try {
-                const response = await fetch('/api/info');
-                const data = await response.json();
-                console.log(data);
-
-                if (!data.Files || data.Files.length === 0) {
-                    container.innerHTML = '<p class="italic text-stone-600">No files in register.</p>';
-                    return;
-                }
-
-                let html = '<ul class="m-0 p-0 list-none space-y-2">';
-                data.Files.forEach(file => {
-                    const { id, name, file_parts, peers_with_file, size } = file;
-                    const hasFile = peers_with_file && peers_with_file.includes(data.SiteID);
-                    const statusClass = hasFile ? 'text-green-700 font-bold' : 'text-stone-500';
-                    const statusText = hasFile ? '[Available Locally]' : '[Available on network]';
-
-                    html += `
-                        <li class="border border-stone-200 bg-white p-3">
-                            <div class="flex justify-between items-start">
-                                <span class="font-bold">${name}</span>
-                                <span class="text-sm ${statusClass}">${statusText}</span>
-                            </div>
-                            <div class="text-sm text-elispis text-stone-600 mt-2 pt-2 border-t border-dotted border-stone-200">
-                                ID: ${id.slice(0, 10) || "N/A"}<br>
-                                Parts: ${file_parts.length}
-                                ${peers_with_file ? '<br>Peers: ' + peers_with_file.join(', ') : ''}
-                            </div>
-                        </li>
-                    `;
-                });
-                html += '</ul>';
-                container.innerHTML = html;
-            } catch (err) {
-                console.error('Failed to fetch info:', err);
-                container.innerHTML = '<p class="italic text-red-600">Failed to load.</p>';
-            }
         }
 
         const msgInput = document.getElementById('message');
@@ -171,7 +142,6 @@ SENDER:USER
             sendMessage(msg);
         });
 
-        fetchInfo();
     </script>
 </body>
 
