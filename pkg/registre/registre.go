@@ -430,7 +430,7 @@ func (r *Registre) CheckIfWeHavePartInOurStorage(currentSiteID string, fileID st
 // - sourcePath: the path to the directory containing the source files
 // - destinationPath: the path to the directory where the file parts will be stored
 func MakeInitialHardcodedRegister(registre *Registre, sourcePath string, destinationPath string) {
-	peersList := []string{"Mathy", "Alexis", "Noah", "Page"}
+	peersList := []string{"0", "1", "2", "3"}
 	registre.Peers = peersList
 	registre.PutAllFilesFromDirectoryInRegister(sourcePath, destinationPath)
 	CleanUpPartsDirectory()
@@ -438,24 +438,24 @@ func MakeInitialHardcodedRegister(registre *Registre, sourcePath string, destina
 	// TODO: make this more dynamic and less hardcoded
 	for i := range registre.GetFileList() {
 		if i%4 == 0 {
-			registre.Files[i].PeersThatHaveFileID = []string{"Mathy", "Alexis"}
+			registre.Files[i].PeersThatHaveFileID = []string{"0", "1"}
 			for part := range registre.Files[i].FileParts {
-				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"Mathy", "Alexis"}
+				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"0", "1"}
 			}
 		} else if i%4 == 1 {
-			registre.Files[i].PeersThatHaveFileID = []string{"Noah", "Page"}
+			registre.Files[i].PeersThatHaveFileID = []string{"2", "3"}
 			for part := range registre.Files[i].FileParts {
-				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"Noah", "Page"}
+				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"2", "3"}
 			}
 		} else if i%4 == 2 {
-			registre.Files[i].PeersThatHaveFileID = []string{"Mathy", "Noah"}
+			registre.Files[i].PeersThatHaveFileID = []string{"0", "2"}
 			for part := range registre.Files[i].FileParts {
-				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"Mathy", "Noah"}
+				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"0", "2"}
 			}
 		} else {
-			registre.Files[i].PeersThatHaveFileID = []string{"Alexis", "Page"}
+			registre.Files[i].PeersThatHaveFileID = []string{"1", "3"}
 			for part := range registre.Files[i].FileParts {
-				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"Alexis", "Page"}
+				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"1", "3"}
 			}
 		}
 	}
