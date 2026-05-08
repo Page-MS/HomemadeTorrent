@@ -153,9 +153,20 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			return parser.Message{}
 		}
 
-	// TODO: voir avec Page que faire lors de la reception des messages de type AskingForShasum et AskingForContent
+	// Demande si un fichier existe
 	case string(torrentlogic.AskingForShasum):
+		{
+			go torrentlogic.HandlePeerAskingIfWeHavePart(c.SiteID, msgTorrent.SenderID, msgTorrent.FileID, msgTorrent.PartID, c.Register)
+		}
+
 	case string(torrentlogic.AskingForContent):
+		torrentlogic.HandlePeerAskingForPartContent(
+			c.SiteID,
+			msgTorrent.SenderID,
+			msgTorrent.FileID,
+			msgTorrent.PartID,
+			c.Register,
+		)
 	}
 
 	return parser.Message{}

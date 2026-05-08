@@ -51,9 +51,8 @@ func (c *Controller) TorrentMessageToParserMessage(tMsg torrentlogic.Message) (p
 		Action:  string(tMsg.MessageType),
 		Stamp:   c.Lamport.GetValue(),
 		Vect:    c.Vector.GetCopy(),
-		Dest:    tMsg.TargetID, // TODO: a confirmer que c'est le bon champ avec Page
+		Dest:    tMsg.TargetID,
 		Sender:  c.SiteID,
 		Payload: payload,
-		// TODO: voir avec noah si besoin de la couleur
 	}, nil
 }
