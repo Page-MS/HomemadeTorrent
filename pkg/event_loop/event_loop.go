@@ -45,6 +45,8 @@ func Start(allSiteIDs []string, siteID string) {
 
 	// Init Controler et Registre
 	register := registre.NewRegistre()
+	registre.MakeInitialHardcodedRegister(register, "./bin/baseFiles", "./bin/parts")
+	registre.InitialiseRegistre(siteID, register)
 	controler := control.NewController(siteID, allSiteIDs, register)
 
 	go listenStdEntry(eventQueue)
@@ -61,7 +63,7 @@ func Start(allSiteIDs []string, siteID string) {
 				Data:   msg,
 			}
 		}
-		webui.StartWebUI(siteID, controler.SiteIndex, onMsg, controler.Reg)
+		webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register)
 	}()
 
 	log.Printf("[EVENT_LOOP] START\n")

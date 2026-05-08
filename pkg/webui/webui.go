@@ -7,6 +7,8 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 )
 
 type WebUI struct {
@@ -32,29 +34,33 @@ func StartWebUI(siteID string, index int, onMessage func(string), register *regi
 	mux.HandleFunc("/api/info", ui.handleInfo)
 	mux.HandleFunc("/api/send", ui.handleSendMessage)
 
-	log.Printf("[WEBUI] Démarrage de l'interface web pour %s sur http://localhost:%s\n", siteID, port)
+	log.Printf("[WEBUI] Starting for %s on http://localhost:%s\n", siteID, port)
 	err := http.ListenAndServe(":"+port, mux)
 	if err != nil {
-		log.Printf("[WEBUI] Erreur lors du démarrage du serveur HTTP sur %s : %v\n", port, err)
+		log.Printf("[WEBUI] Error starting HTTP server on %s : %v\n", port, err)
 	}
 }
 
 func (ui *WebUI) handleHome(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("pkg/webui/index.html")
-	if err != nil {
-		http.Error(w, "Erreur serveur : impossible de charger l'interface", http.StatusInternalServerError)
+	if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+		tmpl, err := template.ParseFiles("pkg/webui/index.html")
+		if err != nil {
+			http.Error(w, "Erreur serveur : impossible de charger l'interface", http.StatusInternalServerError)
+			return
+		}
+
+		data := struct {
+			SiteID string
+			Port   string
+		}{
+			SiteID: ui.SiteID,
+			Port:   ui.Port,
+		}
+
+		tmpl.Execute(w, data)
 		return
 	}
-
-	data := struct {
-		SiteID string
-		Port   string
-	}{
-		SiteID: ui.SiteID,
-		Port:   ui.Port,
-	}
-
-	tmpl.Execute(w, data)
+	http.ServeFileFS(w, r, os.DirFS("./public"), filepath.Base(r.URL.Path))
 }
 
 func (ui *WebUI) handleInfo(w http.ResponseWriter, r *http.Request) {
