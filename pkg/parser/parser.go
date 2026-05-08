@@ -11,13 +11,14 @@ import (
 )
 
 type Message = struct {
-	Action  string
-	Id      string
-	Stamp   int
-	Vect    []int
-	Dest    string
-	Sender  string
-	Payload string
+	Action      string
+	Id          string
+	Stamp       int
+	Vect        []int
+	Dest        string
+	Sender      string
+	Payload_len int
+	Payload     string
 	// pour snapshot
 	Color string
 	Bilan int
@@ -45,7 +46,7 @@ func Decode(raw_data string) (Message, error) {
 	lines := strings.Split(raw_data, "\n")
 	msg := Message{}
 
-	for _, l := range lines {
+	for i, l := range lines {
 		if l == "\n" || l == "" {
 			continue
 		}
@@ -104,6 +105,21 @@ func Decode(raw_data string) (Message, error) {
 				msg.Vect = append(msg.Vect, nb)
 			}
 
+		case "PAYLOAD_LEN":
+			{
+				val, err := strconv.Atoi(value)
+				if err != nil {
+					return Message{}, errors.New("Impossible to payload_len")
+				}
+				msg.Payload_len = val
+				msg.Payload = lines[i+1]
+				if len(msg.Payload) <= 0 {
+					return Message{}, errors.New("Provided payload len but no payload")
+				}
+
+				return msg, nil // return now
+			}
+
 		case "COLOR":
 			msg.Color = value
 
@@ -113,8 +129,6 @@ func Decode(raw_data string) (Message, error) {
 				return Message{}, errors.New("Impossible to BILAN")
 			}
 			msg.Bilan = val
-		case "PAYLOAD":
-			msg.Payload = value
 		default:
 			{
 				return Message{}, errors.New("Found unknown field: " + key)
@@ -157,6 +171,7 @@ func Encode(msg Message) (string, error) {
 	payload_len := len(msg.Payload)
 	if payload_len > 0 {
 		data = append(data, "PAYLOAD:"+msg.Payload)
+		data = append(data, msg.Payload)
 	}
 
 	if msg.Color != "" {
