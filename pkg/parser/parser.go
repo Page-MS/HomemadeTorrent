@@ -170,7 +170,7 @@ func Encode(msg Message) (string, error) {
 
 	payload_len := len(msg.Payload)
 	if payload_len > 0 {
-		data = append(data, "PAYLOAD:"+msg.Payload)
+		data = append(data, "PAYLOAD_LEN:"+strconv.Itoa(payload_len))
 		data = append(data, msg.Payload)
 	}
 
