@@ -113,6 +113,8 @@ func Decode(raw_data string) (Message, error) {
 				return Message{}, errors.New("Impossible to BILAN")
 			}
 			msg.Bilan = val
+		case "PAYLOAD":
+			msg.Payload = value
 		default:
 			{
 				return Message{}, errors.New("Found unknown field: " + key)
@@ -154,8 +156,7 @@ func Encode(msg Message) (string, error) {
 
 	payload_len := len(msg.Payload)
 	if payload_len > 0 {
-		data = append(data, "PAYLOAD_LEN:"+strconv.Itoa(payload_len))
-		data = append(data, msg.Payload)
+		data = append(data, "PAYLOAD:"+msg.Payload)
 	}
 
 	if msg.Color != "" {
@@ -169,15 +170,15 @@ func Encode(msg Message) (string, error) {
 }
 
 func DecodeTorrentPayload(raw_payload string) (torrentlogic.Message, error) {
-	lines := strings.Split(raw_payload, "\n")
+	lines := strings.Split(raw_payload, "/n")
 	msg := torrentlogic.Message{}
 
 	for _, l := range lines {
-		if l == "\n" || l == "" {
+		if l == "\n" || l == "" || l == "/n" {
 			continue
 		}
-		parts := strings.Split(l, ":")
-		if parts[0] == "\n" || parts[0] == "" {
+		parts := strings.Split(l, ";")
+		if parts[0] == "\n" || parts[0] == "" || parts[0] == "/n" {
 			continue
 		}
 		if len(parts) != 2 {
@@ -252,34 +253,34 @@ func EncodeTorrentPayload(msg torrentlogic.Message) (string, error) {
 	if msg.MessageType == "" {
 		return "", errors.New("Empty MessageType")
 	}
-	data = append(data, "MessageType:"+string(msg.MessageType))
+	data = append(data, "MessageType;"+string(msg.MessageType))
 
-	data = append(data, "DeleteMe:"+strconv.FormatBool(msg.DeleteMe))
+	data = append(data, "DeleteMe;"+strconv.FormatBool(msg.DeleteMe))
 
 	if msg.SenderID != "" {
-		data = append(data, "SenderID:"+msg.SenderID)
+		data = append(data, "SenderID;"+msg.SenderID)
 	}
 
 	if msg.TransferID != "" {
 		msg.TransferID = uuid.New().String()
 	}
-	data = append(data, "TransferID:"+msg.TransferID)
+	data = append(data, "TransferID;"+msg.TransferID)
 
 	if msg.TargetID != "" {
-		data = append(data, "TargetID:"+msg.TargetID)
+		data = append(data, "TargetID;"+msg.TargetID)
 	}
 
-	data = append(data, "TransferRelatedEvent:"+strconv.Itoa(int(msg.TransferRelatedEvent)))
+	data = append(data, "TransferRelatedEvent;"+strconv.Itoa(int(msg.TransferRelatedEvent)))
 
 	if msg.FileID != "" {
-		data = append(data, "FileID:"+msg.FileID)
+		data = append(data, "FileID;"+msg.FileID)
 	}
 
-	data = append(data, "PartID:"+strconv.Itoa(int(msg.PartID)))
+	data = append(data, "PartID;"+strconv.Itoa(int(msg.PartID)))
 
 	if msg.Content != "" {
-		data = append(data, "Content:"+msg.Content)
+		data = append(data, "Content;"+msg.Content)
 	}
 
-	return strings.Join(data, "\n") + "\n", nil
+	return strings.Join(data, "/n"), nil
 }

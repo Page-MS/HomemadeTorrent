@@ -7,6 +7,8 @@ import (
 
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
+
+	"github.com/google/uuid"
 )
 
 // handleDistributedFile fait le lien avec distributed_file.go
@@ -136,12 +138,18 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 	switch pMsg.Action {
 	case string(torrentlogic.TransferRelatedMessage):
 		{
-			input, exist := c.InputTorrentTransfers[msgTorrent.TransferID]
+			if len(msgTorrent.TransferID) == 0 {
+				msgTorrent.TransferID = uuid.NewString()
+			}
+
+			// TODO: Voir avec Page quand delete la go-routine (deleteme?)
+			inputChan, exist := c.InputTorrentTransfers[msgTorrent.TransferID]
 			if !exist {
-				inputChan := make(chan torrentlogic.Message, 100)
+				inputChan = make(chan torrentlogic.Message, 100)
+				c.InputTorrentTransfers[msgTorrent.TransferID] = inputChan
 				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Register, inputChan, c.OutputTorrentChan)
 			}
-			input <- msgTorrent
+			inputChan <- msgTorrent
 			return parser.Message{}
 		}
 

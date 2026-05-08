@@ -3,7 +3,7 @@ package event_loop
 import (
 	"HomemadeTorrent/pkg/control"
 	"HomemadeTorrent/pkg/parser"
-	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
+	"HomemadeTorrent/pkg/registre"
 	userInput "HomemadeTorrent/pkg/user_input"
 	"bufio"
 	"fmt"
@@ -42,11 +42,13 @@ func Start(allSiteIDs []string, siteID string) {
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
 
-	// Init Controler
-	controler := control.NewController(siteID, allSiteIDs)
+	// Init Controler et Registre
+	register := registre.NewRegistre()
+	controler := control.NewController(siteID, allSiteIDs, register)
 
 	go listenStdEntry(eventQueue)
 	go listenUserInput(eventQueue, siteID)
+	go listenLocalTorrentOutput(eventQueue, controler)
 	go siteLogic(processingChan, eventQueue, controler)
 
 	log.Printf("[EVENT_LOOP] START\n")
@@ -133,11 +135,9 @@ func listenUserInput(queue chan<- Event, siteID string) {
 	}
 }
 
-func listenLocalTorrentOutput(torrentOutput <-chan torrentlogic.Message, queue chan<- Event, c *control.Controller) {
-	for msg := range torrentOutput {
-		// Deux cas possible:
-		// demande/liberation SC -> controler
-		// message de transfers pour la sortie
+func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
+	for msg := range c.OutputTorrentChan {
+		log.Printf("[EVENT_LOOP] Message torrent output: %v\n", msg)
 		ctrlMsg, err := c.TorrentMessageToParserMessage(msg)
 		if err != nil {
 			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
@@ -146,19 +146,12 @@ func listenLocalTorrentOutput(torrentOutput <-chan torrentlogic.Message, queue c
 		if err != nil {
 			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
 		}
-
-		event := Event{
+		log.Printf("[EVENT_LOOP] Message str torrent output: %s\n", strMsg)
+		queue <- Event{
+			Type:   ReadMessage,
 			Source: FromLocalUser,
 			Data:   strMsg,
 		}
-
-		if msg.MessageType == torrentlogic.AskingFromSC || msg.MessageType == torrentlogic.DoneWithSC {
-			event.Type = ReadMessage
-		} else {
-			event.Type = WriteMessage
-		}
-
-		queue <- event
 	}
 }
 

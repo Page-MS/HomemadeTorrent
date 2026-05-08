@@ -27,8 +27,8 @@ type Controller struct {
 	SeenMessages          map[string]bool // Messages déjà vu par le site
 	NetworkDirectory      SiteDirectory   // Correspondance SiteId et index
 	Snapshot              *snapshot.Snapshot
-	InputTorrentTransfers map[string]chan<- torrentlogic.Message // Map des inputs des transfers torrent en cour
-	OutputTorrentChan     <-chan torrentlogic.Message
+	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
+	OutputTorrentChan     chan torrentlogic.Message
 	Register              *registre.Registre
 }
 
@@ -44,7 +44,7 @@ var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
 }
 
 // NewController initialise un nouveau dispatcher central
-func NewController(siteID string, allSiteIDs []string) *Controller {
+func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Controller {
 	clk := &clock.LamportClock{}
 	dir := NewSiteDirectory(allSiteIDs)
 
@@ -61,9 +61,9 @@ func NewController(siteID string, allSiteIDs []string) *Controller {
 			Bilan:       0,
 			IsInitiator: false,
 		},
-		InputTorrentTransfers: make(map[string]chan<- torrentlogic.Message),
+		InputTorrentTransfers: make(map[string]chan torrentlogic.Message),
 		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
-		Register:              registre.NewRegistre(),               // TODO: voir avec Page si besoin d'initialiser des truc en plus
+		Register:              r,
 	}
 }
 
@@ -233,8 +233,13 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 		log.Printf("[CONTROLLER][LOCAL] Appel logique torrent\n")
 		returnMsg = c.handleTorrent(pMsg)
 	default:
-		log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
-		return nil
+		if isApplicationMessage(pMsg.Action) {
+			// Message destiné à l'extérieur
+			returnMsg = pMsg
+		} else {
+			log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
+			return nil
+		}
 	}
 
 	encodedMsg, err := parser.Encode(returnMsg)
