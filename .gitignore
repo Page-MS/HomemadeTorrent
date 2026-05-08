@@ -40,3 +40,6 @@ go.work.sum
 
 # Logs files
 *.log
+
+# Snapshots
+snapshots/

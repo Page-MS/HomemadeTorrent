@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type MessageType int
+type MessageType string
 
 type PartTransferStatus int
 
@@ -21,11 +21,11 @@ type TransferRelatedEvent int
 
 const CONNEXION_TIMEOUT = 10 * time.Second
 const (
-	AskingFromSC MessageType = iota
-	DoneWithSC
-	TransferRelatedMessage
-	AskingForShasum
-	AskingForContent
+	AskingFromSC           MessageType = "AskingFromSC"
+	DoneWithSC             MessageType = "DoneWithSC"
+	TransferRelatedMessage MessageType = "TransferRelatedMessage"
+	AskingForShasum        MessageType = "AskingForShasum"
+	AskingForContent       MessageType = "AskingForContent"
 )
 
 // Possible types of messages that can be received that the controller should just pass to the transfer without looking into it
@@ -86,20 +86,20 @@ type ongoingTransfer struct {
 }
 
 type Message struct {
-	messageType          MessageType
-	deleteMe             bool
-	senderID             string
-	transferID           string
-	targetID             string
-	transferRelatedEvent TransferRelatedEvent
-	fileID               string
-	partID               uint
-	content              string
+	MessageType          MessageType
+	DeleteMe             bool
+	SenderID             string
+	TransferID           string
+	TargetID             string
+	TransferRelatedEvent TransferRelatedEvent
+	FileID               string
+	PartID               uint
+	Content              string
 }
 
 // Main function to start a transfer
-// It will then autonomously handle it until it's finished or fails
-func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, error error) {
+// It will then autonomously handle it until it's finished
+func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel <-chan Message) (success bool, error error) {
 	fmt.Print("\nStarting transfer for file ID: ", fileID)
 	file := reg.GetFileByID(fileID)
 	if file == nil {
