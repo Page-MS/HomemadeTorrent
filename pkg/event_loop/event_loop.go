@@ -2,6 +2,8 @@ package event_loop
 
 import (
 	"HomemadeTorrent/pkg/control"
+	"HomemadeTorrent/pkg/parser"
+	"HomemadeTorrent/pkg/registre"
 	userInput "HomemadeTorrent/pkg/user_input"
 	"HomemadeTorrent/pkg/webui"
 	"bufio"
@@ -41,11 +43,13 @@ func Start(allSiteIDs []string, siteID string) {
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
 
-	// Init Controler
-	controler := control.NewController(siteID, allSiteIDs)
+	// Init Controler et Registre
+	register := registre.NewRegistre()
+	controler := control.NewController(siteID, allSiteIDs, register)
 
 	go listenStdEntry(eventQueue)
 	go listenUserInput(eventQueue, siteID)
+	go listenLocalTorrentOutput(eventQueue, controler)
 	go siteLogic(processingChan, eventQueue, controler)
 
 	// interface web
@@ -140,6 +144,25 @@ func listenUserInput(queue chan<- Event, siteID string) {
 
 		if err := scanner.Err(); err != nil {
 			log.Println("[EVENT_LOOP] Erreur de lecture User Input:", err)
+		}
+	}
+}
+
+func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
+	for msg := range c.OutputTorrentChan {
+		ctrlMsg, err := c.TorrentMessageToParserMessage(msg)
+		if err != nil {
+			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
+		}
+		strMsg, err := parser.Encode(ctrlMsg)
+		if err != nil {
+			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
+		}
+
+		queue <- Event{
+			Type:   ReadMessage,
+			Source: FromLocalUser,
+			Data:   strMsg,
 		}
 	}
 }

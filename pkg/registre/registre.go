@@ -2,6 +2,7 @@ package registre
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -14,26 +15,26 @@ import (
 
 const FILE_PART_SIZE uint = 16 * 1024
 
-type filePart struct {
-	parentFileID            string
-	filePartID              uint
-	filePartSize            uint
-	filePartShasum          string
-	peersThatHaveFilePartID []string
+type FilePart struct {
+	ParentFileID            string   `json:"parent_file_id"`
+	FilePartID              uint     `json:"file_part_id"`
+	FilePartSize            uint     `json:"file_part_size"`
+	FilePartShasum          string   `json:"file_part_shasum"`
+	PeersThatHaveFilePartID []string `json:"peers_with_part"`
 }
 
 type File struct {
-	Name                string
-	ID                  string
-	size                uint
-	PeersThatHaveFileID []string
-	NumberOfParts       uint
-	FileParts           []filePart
+	Name                string     `json:"name"`
+	ID                  string     `json:"id"`
+	Size                uint       `json:"size"`
+	PeersThatHaveFileID []string   `json:"peers_with_file"`
+	NumberOfParts       uint       `json:"number_of_parts"`
+	FileParts           []FilePart `json:"file_parts"`
 }
 
 type Registre struct {
-	files []File
-	peers []string
+	Files []File   `json:"files"`
+	Peers []string `json:"peers"`
 }
 
 // Calculate the shasum of a file based on its path
@@ -60,7 +61,7 @@ func CalculateShasum(filePath string) string {
 }
 
 func (r *Registre) IsPeerInRegister(peerID string) bool {
-	for _, peer := range r.peers {
+	for _, peer := range r.Peers {
 		if peer == peerID {
 			return true
 		}
@@ -76,7 +77,7 @@ func (r *Registre) IsPeerInRegister(peerID string) bool {
 //
 // Returns:
 // - a slice of filePart containing the informations about the file parts, or an error if something went wrong
-func SplitFile(filePath string, destination string) ([]filePart, error) {
+func SplitFile(filePath string, destination string) ([]FilePart, error) {
 
 	// We get the name of the file
 	fileName := filePath[strings.LastIndex(filePath, "/")+1:]
@@ -92,7 +93,7 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 	// We calculate the number of parts
 	NumberOfParts := (fileSize / FILE_PART_SIZE) + 1
 	// We create the file parts
-	FileParts := make([]filePart, NumberOfParts)
+	FileParts := make([]FilePart, NumberOfParts)
 
 	// We read the file and split it into parts
 	file, err := os.Open(filePath)
@@ -132,11 +133,11 @@ func SplitFile(filePath string, destination string) ([]filePart, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not calculate shasum: %v", err)
 		} else {
-			FileParts[i] = filePart{
-				parentFileID:   partFileName,
-				filePartID:     i + 1, // We start the file part ID at 1 for better readability
-				filePartSize:   partSize,
-				filePartShasum: filePartShasum,
+			FileParts[i] = FilePart{
+				ParentFileID:   partFileName,
+				FilePartID:     i + 1, // We start the file part ID at 1 for better readability
+				FilePartSize:   partSize,
+				FilePartShasum: filePartShasum,
 			}
 		}
 
@@ -152,8 +153,8 @@ func (r *Registre) GetShasumOfPart(fileID string, partID uint) (string, error) {
 	}
 
 	for _, part := range file.FileParts {
-		if part.filePartID == partID {
-			return part.filePartShasum, nil
+		if part.FilePartID == partID {
+			return part.FilePartShasum, nil
 		}
 	}
 
@@ -168,9 +169,9 @@ func (r *Registre) GetShasumOfPart(fileID string, partID uint) (string, error) {
 // Returns:
 // - a pointer to the file if it is found in the register, nil otherwise
 func (r *Registre) GetFileByID(fileID string) *File {
-	for i, file := range r.files {
+	for i, file := range r.Files {
 		if file.ID == fileID {
-			return &r.files[i]
+			return &r.Files[i]
 		}
 	}
 	fmt.Printf("File with ID %s not found\n", fileID)
@@ -178,9 +179,9 @@ func (r *Registre) GetFileByID(fileID string) *File {
 }
 
 func (r *Registre) GetFileByName(fileName string) *File {
-	for i, file := range r.files {
+	for i, file := range r.Files {
 		if file.Name == fileName {
-			return &r.files[i]
+			return &r.Files[i]
 		}
 	}
 	return nil
@@ -214,7 +215,7 @@ func (r *Registre) PutAllFilesFromDirectoryInRegister(source string, destination
 			newFile := File{
 				Name:          fileTreated.Name(),
 				ID:            CalculateShasum(filePath),
-				size:          uint(fileSize),
+				Size:          uint(fileSize),
 				NumberOfParts: uint(len(FileParts)),
 				FileParts:     FileParts,
 			}
@@ -254,25 +255,25 @@ func initialisationFileCopy(fileInfos File, siteID string) {
 
 // add the informations of a file in the register
 func (r *Registre) AddFile(fileInfos File) {
-	r.files = append(r.files, fileInfos)
+	r.Files = append(r.Files, fileInfos)
 }
 
 // Return the list of peers in the register
 func (r *Registre) GetPeerList() []string {
-	if len(r.peers) == 0 {
+	if len(r.Peers) == 0 {
 		fmt.Printf("No peers in the register\n")
 		return nil
 	}
-	return r.peers
+	return r.Peers
 }
 
 // Return the data structure of the files in the register
 func (r *Registre) GetFileList() []File {
-	if len(r.files) == 0 {
+	if len(r.Files) == 0 {
 		fmt.Printf("No files in the register\n")
 		return nil
 	}
-	return r.files
+	return r.Files
 }
 
 // Get the information about a file part based on the file ID and the file part ID
@@ -283,14 +284,14 @@ func (r *Registre) GetFileList() []File {
 //
 // Returns:
 // - a pointer to the file part if it is found in the register, nil otherwise
-func (r *Registre) GetFilePart(fileID string, partID uint) *filePart {
+func (r *Registre) GetFilePart(fileID string, partID uint) *FilePart {
 	file := r.GetFileByID(fileID)
 	if file == nil {
 		fmt.Printf("File with ID %s not found\n", fileID)
 		return nil
 	}
 	for i, part := range file.FileParts {
-		if part.filePartID == partID {
+		if part.FilePartID == partID {
 			return &file.FileParts[i]
 		}
 	}
@@ -300,18 +301,18 @@ func (r *Registre) GetFilePart(fileID string, partID uint) *filePart {
 
 // Print the register for debug purposes
 func (r *Registre) DetailedPrintRegister() {
-	if len(r.files) == 0 {
+	if len(r.Files) == 0 {
 		fmt.Printf("No files in the register\n")
 		return
 	}
-	for _, file := range r.files {
-		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.Name, file.ID, file.size, file.NumberOfParts)
+	for _, file := range r.Files {
+		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.Name, file.ID, file.Size, file.NumberOfParts)
 		for _, peer := range file.PeersThatHaveFileID {
 			fmt.Printf("\tPeer that has the file: %s\n", peer)
 		}
 		for _, part := range file.FileParts {
-			fmt.Printf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.filePartID, part.filePartSize, part.filePartShasum)
-			for _, peer := range part.peersThatHaveFilePartID {
+			fmt.Printf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.FilePartID, part.FilePartSize, part.FilePartShasum)
+			for _, peer := range part.PeersThatHaveFilePartID {
 				fmt.Printf("\tPeer that has the file part: %s\n", peer)
 			}
 		}
@@ -320,12 +321,12 @@ func (r *Registre) DetailedPrintRegister() {
 
 // Print the register for debug purposes
 func (r *Registre) PrintRegister() {
-	if len(r.files) == 0 {
+	if len(r.Files) == 0 {
 		fmt.Printf("No files in the register\n")
 		return
 	}
-	for _, file := range r.files {
-		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.Name, file.ID, file.size, file.NumberOfParts)
+	for _, file := range r.Files {
+		fmt.Printf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.Name, file.ID, file.Size, file.NumberOfParts)
 		for _, peer := range file.PeersThatHaveFileID {
 			fmt.Printf("\tPeer that has the file: %s\n", peer)
 		}
@@ -335,8 +336,8 @@ func (r *Registre) PrintRegister() {
 // Create an empty register
 func NewRegistre() *Registre {
 	return &Registre{
-		files: []File{},
-		peers: []string{},
+		Files: []File{},
+		Peers: []string{},
 	}
 }
 
@@ -390,11 +391,11 @@ func (r *Registre) GetPeersHavingPart(fileID string, partID uint) []string {
 		fmt.Printf("File part with ID %d not found in file with ID %s\n", partID, fileID)
 		return nil
 	}
-	return part.peersThatHaveFilePartID
+	return part.PeersThatHaveFilePartID
 }
 
 func (r *Registre) GetFileNameByID(fileID string) string {
-	for _, file := range r.files {
+	for _, file := range r.Files {
 		if file.ID == fileID {
 			return file.Name
 		}
@@ -430,31 +431,31 @@ func (r *Registre) CheckIfWeHavePartInOurStorage(currentSiteID string, fileID st
 // - destinationPath: the path to the directory where the file parts will be stored
 func MakeInitialHardcodedRegister(registre *Registre, sourcePath string, destinationPath string) {
 	peersList := []string{"Mathy", "Alexis", "Noah", "Page"}
-	registre.peers = peersList
+	registre.Peers = peersList
 	registre.PutAllFilesFromDirectoryInRegister(sourcePath, destinationPath)
 	CleanUpPartsDirectory()
 	// We decide very arbitrary which peers have which files at the begining of the execution of the program
 	// TODO: make this more dynamic and less hardcoded
 	for i := range registre.GetFileList() {
 		if i%4 == 0 {
-			registre.files[i].PeersThatHaveFileID = []string{"Mathy", "Alexis"}
-			for part := range registre.files[i].FileParts {
-				registre.files[i].FileParts[part].peersThatHaveFilePartID = []string{"Mathy", "Alexis"}
+			registre.Files[i].PeersThatHaveFileID = []string{"Mathy", "Alexis"}
+			for part := range registre.Files[i].FileParts {
+				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"Mathy", "Alexis"}
 			}
 		} else if i%4 == 1 {
-			registre.files[i].PeersThatHaveFileID = []string{"Noah", "Page"}
-			for part := range registre.files[i].FileParts {
-				registre.files[i].FileParts[part].peersThatHaveFilePartID = []string{"Noah", "Page"}
+			registre.Files[i].PeersThatHaveFileID = []string{"Noah", "Page"}
+			for part := range registre.Files[i].FileParts {
+				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"Noah", "Page"}
 			}
 		} else if i%4 == 2 {
-			registre.files[i].PeersThatHaveFileID = []string{"Mathy", "Noah"}
-			for part := range registre.files[i].FileParts {
-				registre.files[i].FileParts[part].peersThatHaveFilePartID = []string{"Mathy", "Noah"}
+			registre.Files[i].PeersThatHaveFileID = []string{"Mathy", "Noah"}
+			for part := range registre.Files[i].FileParts {
+				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"Mathy", "Noah"}
 			}
 		} else {
-			registre.files[i].PeersThatHaveFileID = []string{"Alexis", "Page"}
-			for part := range registre.files[i].FileParts {
-				registre.files[i].FileParts[part].peersThatHaveFilePartID = []string{"Alexis", "Page"}
+			registre.Files[i].PeersThatHaveFileID = []string{"Alexis", "Page"}
+			for part := range registre.Files[i].FileParts {
+				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"Alexis", "Page"}
 			}
 		}
 	}
@@ -469,7 +470,7 @@ func MakeInitialHardcodedRegister(registre *Registre, sourcePath string, destina
 func InitialiseRegistre(currentSiteID string, registre *Registre) {
 	fmt.Printf("Initialisation du registre pour le site %s\n", currentSiteID)
 	// If the site ID is not in the register, we return an error
-	if !slices.Contains(registre.peers, currentSiteID) {
+	if !slices.Contains(registre.Peers, currentSiteID) {
 		fmt.Printf("Site ID %s not found in the register\n", currentSiteID)
 		return
 	}
@@ -529,4 +530,22 @@ func CleanUpPartsDirectory() {
 			}
 		}
 	}
+}
+
+// ToJSON transforme le registre en string (pour le Payload du message)
+func (r *Registre) ToJSON() (string, error) {
+	bytes, err := json.Marshal(r)
+	if err != nil {
+		return "", fmt.Errorf("erreur lors de la sérialisation JSON : %v", err)
+	}
+	return string(bytes), nil
+}
+
+// FromJSON remplit le registre à partir d'une string JSON
+func (r *Registre) FromJSON(data string) error {
+	err := json.Unmarshal([]byte(data), r)
+	if err != nil {
+		return fmt.Errorf("erreur lors de la désérialisation JSON : %v", err)
+	}
+	return nil
 }

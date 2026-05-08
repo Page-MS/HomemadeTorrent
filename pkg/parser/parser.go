@@ -1,6 +1,7 @@
 package parser
 
 import (
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"errors"
 	"log"
 	"strconv"
@@ -16,8 +17,6 @@ type Message = struct {
 	Vect        []int
 	Dest        string
 	Sender      string
-	Object      string
-	Chunk       int
 	Payload_len int
 	Payload     string
 	// pour snapshot
@@ -70,10 +69,6 @@ func Decode(raw_data string) (Message, error) {
 			{
 				msg.Id = value
 			}
-		case "OBJECT":
-			{
-				msg.Object = value
-			}
 
 		case "DEST":
 			{
@@ -83,15 +78,6 @@ func Decode(raw_data string) (Message, error) {
 		case "SENDER":
 			{
 				msg.Sender = value
-			}
-
-		case "CHUNK":
-			{
-				val, err := strconv.Atoi(value)
-				if err != nil {
-					return Message{}, errors.New("Impossible to convert CHUNK nb")
-				}
-				msg.Chunk = val
 			}
 
 		case "STAMP":
@@ -182,14 +168,6 @@ func Encode(msg Message) (string, error) {
 	}
 	data = append(data, "VECT:"+strings.Join(str, ","))
 
-	if msg.Object != "" {
-		data = append(data, "OBJECT:"+msg.Object)
-	}
-
-	if msg.Chunk != -1 {
-		data = append(data, "CHUNK:"+strconv.Itoa(msg.Chunk))
-	}
-
 	payload_len := len(msg.Payload)
 	if payload_len > 0 {
 		data = append(data, "PAYLOAD_LEN:"+strconv.Itoa(payload_len))
@@ -204,4 +182,120 @@ func Encode(msg Message) (string, error) {
 		data = append(data, "BILAN:"+strconv.Itoa(msg.Bilan))
 	}
 	return strings.Join(data, "\n") + "\n", nil
+}
+
+func DecodeTorrentPayload(raw_payload string) (torrentlogic.Message, error) {
+	lines := strings.Split(raw_payload, "/n")
+	msg := torrentlogic.Message{}
+
+	for _, l := range lines {
+		if l == "\n" || l == "" || l == "/n" {
+			continue
+		}
+		parts := strings.Split(l, ";")
+		if parts[0] == "\n" || parts[0] == "" || parts[0] == "/n" {
+			continue
+		}
+		if len(parts) != 2 {
+			return torrentlogic.Message{}, errors.New("Payload line must have exactly 2 component. Found: " + strings.Join(parts, " "))
+		}
+		key := parts[0]
+		value := strings.TrimSpace(parts[1])
+		switch key {
+		case "MessageType":
+			{
+				msg.MessageType = torrentlogic.MessageType(value)
+			}
+		case "DeleteMe":
+			{
+				b, err := strconv.ParseBool(value)
+				if err != nil {
+					log.Printf("[PARSER] Erreur: %v\n", err)
+					return torrentlogic.Message{}, errors.New("Impossible to convert DeleteMe value")
+				}
+				msg.DeleteMe = b
+			}
+		case "SenderID":
+			{
+				msg.SenderID = value
+			}
+		case "TransferID":
+			{
+				msg.TransferID = value
+			}
+		case "TargetID":
+			{
+				msg.TargetID = value
+			}
+		case "TransferRelatedEvent":
+			{
+				val, err := strconv.Atoi(value)
+				if err != nil {
+					log.Printf("[PARSER] Erreur: %v\n", err)
+					return torrentlogic.Message{}, errors.New("Impossible to convert TransferRelatedEvent value")
+				}
+				msg.TransferRelatedEvent = torrentlogic.TransferRelatedEvent(val)
+			}
+		case "FileID":
+			{
+				msg.FileID = value
+			}
+		case "PartID":
+			{
+				val, err := strconv.Atoi(value)
+				if err != nil {
+					log.Printf("[PARSER] Erreur: %v\n", err)
+					return torrentlogic.Message{}, errors.New("Impossible to convert PartID value")
+				}
+				msg.PartID = uint(val)
+			}
+		case "Content":
+			{
+				msg.Content = value
+			}
+		default:
+			{
+				return torrentlogic.Message{}, errors.New("Found unknown field: " + key)
+			}
+		}
+	}
+	return msg, nil
+}
+
+func EncodeTorrentPayload(msg torrentlogic.Message) (string, error) {
+	data := make([]string, 0, 10)
+
+	if msg.MessageType == "" {
+		return "", errors.New("Empty MessageType")
+	}
+	data = append(data, "MessageType;"+string(msg.MessageType))
+
+	data = append(data, "DeleteMe;"+strconv.FormatBool(msg.DeleteMe))
+
+	if msg.SenderID != "" {
+		data = append(data, "SenderID;"+msg.SenderID)
+	}
+
+	if msg.TransferID != "" {
+		msg.TransferID = uuid.New().String()
+	}
+	data = append(data, "TransferID;"+msg.TransferID)
+
+	if msg.TargetID != "" {
+		data = append(data, "TargetID;"+msg.TargetID)
+	}
+
+	data = append(data, "TransferRelatedEvent;"+strconv.Itoa(int(msg.TransferRelatedEvent)))
+
+	if msg.FileID != "" {
+		data = append(data, "FileID;"+msg.FileID)
+	}
+
+	data = append(data, "PartID;"+strconv.Itoa(int(msg.PartID)))
+
+	if msg.Content != "" {
+		data = append(data, "Content;"+msg.Content)
+	}
+
+	return strings.Join(data, "/n"), nil
 }
