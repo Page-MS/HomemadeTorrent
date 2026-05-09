@@ -337,7 +337,7 @@ func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, 
 		PartID:               partID,
 		Content:              content,
 	}
-	log.Printf("\n[TORRENT] Message details:\n Type: %s\n Sender: %s\n Target: %s\n TransferID: %s\n FileID: %s\n PartID: %d\n Content: %s\n Content hexadecimal: %x", messageName[message.MessageType], message.SenderID, message.TargetID, message.TransferID, message.FileID, message.PartID, message.Content, message.Content)
+	log.Printf("\n[TORRENT] Message details:\n Type: %s\n Sender: %s\n Target: %s\n TransferID: %s\n FileID: %s\n PartID: %d\n Content: %s\n", messageName[message.MessageType], message.SenderID, message.TargetID, message.TransferID, message.FileID, message.PartID, message.Content)
 	outputMessagesChannel <- message
 
 }
