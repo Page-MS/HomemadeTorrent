@@ -4,7 +4,6 @@ import (
 	"HomemadeTorrent/pkg/snapshot"
 	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
-	"os/exec"
 	"sort"
 
 	"HomemadeTorrent/pkg/clock"
@@ -148,25 +147,22 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		if msgSnapshot != "" {
 			responses = append(responses, msgSnapshot)
 		}
-
-		// Lance le script avec un argument
-		log.Printf("[TEST] SIte ID: %s\n", c.SiteID)
-		if c.SiteID == "1" {
-			log.Printf("[TEST] Fake recepetion enclenchée\n")
-			cmd := exec.Command("../../simulations/msg.sh")
-			_, err := cmd.CombinedOutput()
-			if err != nil {
-				log.Println("Erreur :", err)
-			}
-		}
 	}
 
 	// Détection des messages Prépost : Envoyé blanc, reçu rouge
 	if pMsg.Color == string(snapshot.White) && c.Snapshot.MyColor == snapshot.Red && isApplicationMessage(pMsg.Action) {
-		log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
+		// si on est initiateur pas besoin de créer un message
+		var responseMsg string
+		if c.Snapshot.IsInitiator {
+			log.Printf("[SNAPSHOT] Message Prépost identifié. Ajout à la liste.")
+			responseMsg = c.addPrepostToSnapshot(pMsg)
+
+		} else {
+			log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
+			responseMsg = c.formatPrepostForInitiator(pMsg)
+		}
 		// On crée un message de contrôle pour envoyer ce contenu à l'initiateur
-		prepostMsg := c.formatPrepostForInitiator(pMsg)
-		responses = append(responses, prepostMsg)
+		responses = append(responses, responseMsg)
 	}
 
 	// ------------- Logique controler --------------

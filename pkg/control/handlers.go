@@ -5,6 +5,7 @@ import (
 	"HomemadeTorrent/pkg/snapshot"
 	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
+	"os/exec"
 
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
@@ -91,6 +92,17 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 			pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
 			pMsg.Color = string(snapshot.Red)
 
+			// Lance le script avec un argument //TODO : Debug (a enlever)
+			log.Printf("[TEST] SIte ID: %s\n", c.SiteID)
+			if c.SiteID == "1" {
+				log.Printf("[TEST] Fake recepetion enclenchée\n")
+				cmd := exec.Command("../../simulations/msg.sh")
+				_, err := cmd.CombinedOutput()
+				if err != nil {
+					log.Println("Erreur :", err)
+				}
+			}
+
 			return pMsg // On envoie le Marker au suivant
 		}
 
@@ -132,7 +144,6 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 			c.Snapshot.NbMsgAttendus--
 			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, pMsg.Payload)
 			log.Printf("[SNAPSHOT] Message en vol archivé. Restant : %d", c.Snapshot.NbMsgAttendus)
-
 		} else {
 			log.Printf("[SNAPSHOT] Prepost reçu hors session, ignoré.")
 		}

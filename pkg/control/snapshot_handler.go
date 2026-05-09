@@ -45,7 +45,7 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID int) str
 
 	// Si on est l'initiateur, on initialise le comptage
 	if isInitiator {
-		c.Snapshot.Bilan++
+		c.Snapshot.Bilan++ //TODO : Debug (a enlever)
 		c.Snapshot.NbEtatsAttendus = len(c.NetworkDirectory.IndexToID) - 1
 		c.Snapshot.NbMsgAttendus = c.Snapshot.Bilan
 		c.Snapshot.CollectedStates = []snapshot.SiteState{}
@@ -188,4 +188,33 @@ func (c *Controller) finalizeSnapshot() parser.Message {
 	}
 	log.Println("[SNAPSHOT] Système prêt pour une nouvelle sauvegarde.")
 	return resetMsg
+}
+
+// addPrepostToSnapshot ajoute un message identifié comme prépost à la snapshot
+func (c *Controller) addPrepostToSnapshot(pMsg parser.Message) string {
+	// Un message prépost est un message envoyé blanc reçu rouge
+	jsonMsg, err := json.Marshal(pMsg)
+	if err != nil {
+		log.Printf("[SNPASHOT][PREPOST] Erreur serialisation JSON du prepost: %v\n", err)
+	}
+
+	if c.Snapshot.NbEtatsAttendus > 0 || c.Snapshot.NbMsgAttendus > 0 {
+		c.Snapshot.NbMsgAttendus--
+		c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, string(jsonMsg))
+		log.Printf("[SNAPSHOT] Message en vol archivé. Restant : %d", c.Snapshot.NbMsgAttendus)
+	} else {
+		log.Printf("[SNAPSHOT] Prepost reçu hors session, ignoré.")
+	}
+
+	// terminaison
+	if c.Snapshot.NbEtatsAttendus == 0 && c.Snapshot.NbMsgAttendus == 0 {
+		resetMsg := c.finalizeSnapshot()
+		stringResetMsg, err := parser.Encode(resetMsg)
+		if err != nil {
+			log.Printf("[SNAPSHOT][ERROR] Erreur encodage message prépost : %v\n", err)
+			return ""
+		}
+		return stringResetMsg
+	}
+	return ""
 }
