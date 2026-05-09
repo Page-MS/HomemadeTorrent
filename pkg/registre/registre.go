@@ -12,8 +12,9 @@ import (
 )
 
 // 16 KiB file part size (except the last one)
-
 const FILE_PART_SIZE uint = 3 //16 * 1024
+
+const BIN_PATH_FROM_MAIN = "../../bin"
 
 type FilePart struct {
 	ParentFileID            string   `json:"parent_file_id"`
@@ -231,22 +232,22 @@ func (r *Registre) PutAllFilesFromDirectoryInRegister(source string, destination
 // - file: the informations of the file to copy
 // - siteID: the ID of the current site, used to create the destination path of the file to copy
 func initialisationFileCopy(fileInfos File, siteID string) {
-	fileURL := "../../bin/baseFiles/" + fileInfos.Name
+	fileURL := BIN_PATH_FROM_MAIN + "/baseFiles/" + fileInfos.Name
 	filecontent, err := os.ReadFile(fileURL)
 	if err != nil {
 		log.Printf("[REGISTRE] Error reading file: %v\n", err)
 		return
 	}
 	// We create the fullFiles folder for the site if it does not exist
-	if _, err := os.Stat("../../bin/" + siteID); os.IsNotExist(err) {
-		err = os.MkdirAll("../../bin/"+siteID, 0755)
+	if _, err := os.Stat(BIN_PATH_FROM_MAIN + "/" + siteID); os.IsNotExist(err) {
+		err = os.MkdirAll(BIN_PATH_FROM_MAIN+"/"+siteID, 0755)
 		if err != nil {
 			log.Printf("[REGISTRE] Error creating fullFiles folder: %v\n", err)
 			return
 		}
 	}
 
-	err = os.WriteFile("../../bin/"+siteID+"/"+fileInfos.Name, filecontent, 0644)
+	err = os.WriteFile(BIN_PATH_FROM_MAIN+"/"+siteID+"/"+fileInfos.Name, filecontent, 0644)
 	if err != nil {
 		log.Printf("[REGISTRE] Error writing file: %v\n", err)
 		return
@@ -489,7 +490,7 @@ func InitialiseRegistre(currentSiteID string, registre *Registre) {
 	// We copy the files that the site should have at the beginning of the execution of the program based on the precreated common register from the fullFiles folder to the site folder
 	for _, file := range filesToHave {
 		initialisationFileCopy(file, currentSiteID)
-		SplitFile("../../bin/"+currentSiteID+"/"+file.Name, "../../bin/"+currentSiteID+"/parts")
+		SplitFile(BIN_PATH_FROM_MAIN+"/"+currentSiteID+"/"+file.Name, BIN_PATH_FROM_MAIN+"/"+currentSiteID+"/parts")
 	}
 
 }
@@ -498,33 +499,33 @@ func InitialiseRegistre(currentSiteID string, registre *Registre) {
 //
 // Is used between executions or after an intialization of the register to clean up the files in bin and avoid having old files that can interfere with the execution of the program
 func CleanUpPartsDirectory() {
-	files, err := os.ReadDir("../../bin/parts")
+	files, err := os.ReadDir(BIN_PATH_FROM_MAIN + "/parts")
 	if err != nil {
 		log.Printf("[REGISTRE] Error reading directory: %v\n", err)
 		return
 	}
 	for _, file := range files {
-		err := os.Remove("../../bin/parts/" + file.Name())
+		err := os.Remove(BIN_PATH_FROM_MAIN + "/parts/" + file.Name())
 		if err != nil {
 			log.Printf("[REGISTRE] Error removing file: %v\n", err)
 			return
 		}
 	}
 	// We delete the subfolder
-	err = os.Remove("../../bin/parts")
+	err = os.Remove(BIN_PATH_FROM_MAIN + "/parts")
 	if err != nil {
 		log.Printf("[REGISTRE] Error removing directory: %v\n", err)
 		return
 	}
 	// We remove the subfolders for each site
-	files, err = os.ReadDir("../../bin")
+	files, err = os.ReadDir(BIN_PATH_FROM_MAIN)
 	if err != nil {
 		log.Printf("[REGISTRE] Error reading directory: %v\n", err)
 		return
 	}
 	for _, file := range files {
 		if file.IsDir() && file.Name() != "baseFiles" {
-			err := os.RemoveAll("../../bin/" + file.Name())
+			err := os.RemoveAll(BIN_PATH_FROM_MAIN + "/" + file.Name())
 			if err != nil {
 				log.Printf("[REGISTRE] Error removing directory: %v\n", err)
 				return

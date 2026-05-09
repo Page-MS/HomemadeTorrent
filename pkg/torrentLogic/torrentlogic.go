@@ -21,6 +21,9 @@ type TransferRelatedEvent int
 // 2. On reçoit AskingForContent (vas être supprimée après réponse)
 
 const CONNEXION_TIMEOUT = 10 * time.Second
+
+const BIN_PATH = registre.BIN_PATH_FROM_MAIN
+
 const (
 	AskingFromSC           MessageType = "AskingFromSC"
 	DoneWithSC             MessageType = "DoneWithSC"
@@ -169,7 +172,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		log.Printf("\n[TORRENT] Transfer for file %s completed with errors, parts not received: %v", file.Name, transfer.partsToAskIDs)
 		return false, nil
 	}
-	error = registre.ReassembleFileFromParts(file.Name, "../../bin/"+currentSite+"/parts", "../../bin/"+currentSite+"/reassembled", reg)
+	error = registre.ReassembleFileFromParts(file.Name, BIN_PATH+"/"+currentSite+"/parts", BIN_PATH+"/"+currentSite+"/reassembled", reg)
 	if error != nil {
 		log.Printf("\n[TORRENT] Error while reassembling file %s: %v", file.Name, error)
 		return false, error
@@ -297,7 +300,7 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 	}
 	content := msg.Content
 	// Save content to file
-	err = os.WriteFile(fmt.Sprintf("../../bin/%s/parts/%s_%d", currentSite, fileID, partID), []byte(content), 0644)
+	err = os.WriteFile(fmt.Sprintf(BIN_PATH+"/%s/parts/%s_%d", currentSite, fileID, partID), []byte(content), 0644)
 	if err != nil {
 		return false, err
 	}
@@ -310,7 +313,7 @@ func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID st
 	// We check locally if we can find the part in our local storage
 	// We get the file name
 
-	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "../../bin")
+	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, BIN_PATH)
 	if err != nil {
 		return err
 	}
@@ -344,7 +347,7 @@ func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID 
 	log.Printf("\n[TORRENT] Peer %s is asking for the content of part %d of file %s", peerID, partID, fileID)
 	// We check locally if we can find the part in our local storage
 	// We get the file name
-	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "../../bin")
+	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, BIN_PATH)
 	if err != nil {
 		return err
 	}
