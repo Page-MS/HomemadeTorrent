@@ -184,7 +184,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			if !exist {
 				inputChan = make(chan torrentlogic.Message, 100)
 				c.InputTorrentTransfers[msgTorrent.TransferID] = inputChan
-				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Register, inputChan, c.OutputTorrentChan)
+				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Reg, inputChan, c.OutputTorrentChan)
 			}
 			inputChan <- msgTorrent
 			return parser.Message{}
@@ -199,7 +199,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 				msgTorrent.FileID,
 				msgTorrent.PartID,
 				msgTorrent.TransferID,
-				c.Register,
+				c.Reg,
 				c.OutputTorrentChan,
 			)
 		}
@@ -211,7 +211,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			msgTorrent.FileID,
 			msgTorrent.PartID,
 			msgTorrent.TransferID,
-			c.Register,
+			c.Reg,
 			c.OutputTorrentChan,
 		)
 	}

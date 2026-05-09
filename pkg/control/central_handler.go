@@ -29,7 +29,6 @@ type Controller struct {
 	Snapshot              *snapshot.Snapshot
 	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
 	OutputTorrentChan     chan torrentlogic.Message
-	Register              *registre.Registre
 }
 
 // Adapter cette valeur en focntion de la convention choisie
@@ -63,7 +62,7 @@ func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Co
 		},
 		InputTorrentTransfers: make(map[string]chan torrentlogic.Message),
 		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
-		Register:              r,
+		Reg:                   r,
 	}
 }
 
