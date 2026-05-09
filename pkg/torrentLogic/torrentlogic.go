@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -133,10 +134,10 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	// WaitGroup for synchronizing the transfers goroutines
 	var wg sync.WaitGroup
 	// We make a tab of channels to transmit the messages to the goroutines
-	partIncomingChannels := make([]chan Message, file.NumberOfParts)
+	partIncomingChannels := make([]chan Message, file.NumberOfParts+1)
 
-	for i := uint(0); i < file.NumberOfParts; i++ {
-		transfer.partsToAskIDs[i] = i
+	for i := uint(1); i <= file.NumberOfParts; i++ {
+		transfer.partsToAskIDs[i-1] = i
 		partIncomingChannels[i] = make(chan Message)
 		wg.Add(1)
 		go StartTransferForPart(transferID, fileID, i, currentSite, reg, transfersResultsChannel, &wg, partIncomingChannels[i], outputMessagesChannel)
@@ -144,7 +145,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	// Goroutine to dispatch incoming messages to the corresponding part goroutine
 	go func() {
 		for msg := range incomingMessagesChannel {
-			if msg.PartID < file.NumberOfParts {
+			if msg.PartID >= 1 && msg.PartID <= file.NumberOfParts {
 				partIncomingChannels[msg.PartID] <- msg
 			}
 		}
@@ -264,47 +265,54 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 func AskPeerForPart(transferID string, peerID string, fileID string, partID uint, currentSite string, reg *registre.Registre, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, err error) {
 	log.Print("\n[TORRENT] Asking peer ", peerID, " for part ", partID, " of file ", fileID)
 	// Send message asking for shasum
-	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, 1, fileID, partID, "", outputMessagesChannel)
-	// Wait for response or timeout
-	timeout := false
-	go func() {
-		time.Sleep(CONNEXION_TIMEOUT)
-		timeout = true
-	}()
-	if timeout == true {
+	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
+	// Wait for response (shasum) or timeout
+	select {
+	case msg := <-incomingMessagesChannel:
+		if msg.TransferRelatedEvent != ReceivingShasum || msg.PartID != partID || msg.FileID != fileID {
+			return false, fmt.Errorf("unexpected message: %+v", msg)
+		}
+		shasum := msg.Content
+		// Check if the shasum match our register
+		err = HandlePeerRespondingWithShasum(currentSite, peerID, fileID, partID, shasum, reg)
+		if err != nil {
+			return false, err
+		}
+	// Timeout
+	case <-time.After(CONNEXION_TIMEOUT):
 		return false, nil
-	}
-	msg := <-incomingMessagesChannel
-	if msg.TransferRelatedEvent != ReceivingShasum || msg.PartID != partID || msg.FileID != fileID {
-		return false, fmt.Errorf("unexpected message: %+v", msg)
-	}
-	shasum := msg.Content
-	// Check shasum
-	err = HandlePeerRespondingWithShasum(currentSite, peerID, fileID, partID, shasum, reg)
-	if err != nil {
-		return false, err
 	}
 	// Send message asking for content
-	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, 1, fileID, partID, "", outputMessagesChannel)
-	// Wait for content
-	go func() {
-		time.Sleep(CONNEXION_TIMEOUT)
-		timeout = true
-	}()
-	if timeout == true {
+	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
+	// We wait until we receive the content of the file (hopefully...)
+	select {
+	case msg := <-incomingMessagesChannel:
+		if msg.TransferRelatedEvent != ReceivingContent || msg.PartID != partID || msg.FileID != fileID {
+			return false, fmt.Errorf("unexpected message: %+v", msg)
+		}
+		content := msg.Content
+		file := reg.GetFileByID(fileID)
+		if file == nil {
+			return false, fmt.Errorf("file with ID %s not found in register", fileID)
+		}
+		fileNameWithoutExt := file.Name
+		if idx := strings.LastIndex(file.Name, "."); idx != -1 {
+			fileNameWithoutExt = file.Name[:idx]
+		}
+		partFilePath := fmt.Sprintf("%s/%s/parts/%s_part%d", BIN_PATH, currentSite, fileNameWithoutExt, partID-1)
+		if err := os.MkdirAll(fmt.Sprintf("%s/%s/parts", BIN_PATH, currentSite), 0755); err != nil {
+			return false, fmt.Errorf("could not create parts directory: %v", err)
+		}
+		err = os.WriteFile(partFilePath, []byte(content), 0644)
+		if err != nil {
+			return false, err
+		}
+		// WOHOOO
+		log.Printf("\n[TORRENT] Saved part file: %s\n", partFilePath)
+		return true, nil
+	case <-time.After(CONNEXION_TIMEOUT):
 		return false, nil
 	}
-	msg = <-incomingMessagesChannel
-	if msg.TransferRelatedEvent != ReceivingContent || msg.PartID != partID || msg.FileID != fileID {
-		return false, fmt.Errorf("unexpected message: %+v", msg)
-	}
-	content := msg.Content
-	// Save content to file
-	err = os.WriteFile(fmt.Sprintf(BIN_PATH+"/%s/parts/%s_%d", currentSite, fileID, partID), []byte(content), 0644)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // Function called by the controller to answer a request without launching a full transfer
