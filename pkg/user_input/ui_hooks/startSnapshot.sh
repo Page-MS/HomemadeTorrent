@@ -5,4 +5,4 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
-printf "ACTION:MARKER\nID:snap_start\nDEST:$1\nSENDER:USER\n\n" > /tmp/site_input_$1
+printf "ACTION:MARKER\nDEST:$1\nSENDER:USER\n\n" > /tmp/site_input_$1

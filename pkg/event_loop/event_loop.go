@@ -43,8 +43,11 @@ func Start(allSiteIDs []string, siteID string) {
 	processingChan := make(chan Event, 100)
 
 	// Init Controler et Registre
-	register := registre.NewRegistre()
-	controler := control.NewController(siteID, allSiteIDs, register)
+	register := registre.Registre{}
+	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
+	registre.InitialiseRegistre(siteID, &register)
+
+	controler := control.NewController(siteID, allSiteIDs, &register)
 
 	go listenStdEntry(eventQueue)
 	go listenUserInput(eventQueue, siteID)

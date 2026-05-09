@@ -277,9 +277,8 @@ func EncodeTorrentPayload(msg torrentlogic.Message) (string, error) {
 	}
 
 	if msg.TransferID != "" {
-		msg.TransferID = uuid.New().String()
+		data = append(data, "TransferID;"+msg.TransferID)
 	}
-	data = append(data, "TransferID;"+msg.TransferID)
 
 	if msg.TargetID != "" {
 		data = append(data, "TargetID;"+msg.TargetID)

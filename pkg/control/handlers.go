@@ -198,6 +198,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 				msgTorrent.SenderID,
 				msgTorrent.FileID,
 				msgTorrent.PartID,
+				msgTorrent.TransferID,
 				c.Register,
 				c.OutputTorrentChan,
 			)
@@ -209,6 +210,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			msgTorrent.SenderID,
 			msgTorrent.FileID,
 			msgTorrent.PartID,
+			msgTorrent.TransferID,
 			c.Register,
 			c.OutputTorrentChan,
 		)
