@@ -1,13 +1,15 @@
 #!/bin/sh
 
 # On récupère le chemin absolu du dossier simulations (où on veut les logs)
-LOG_DIR=$(pwd)
+LOG_DIR="$(pwd)/logs"
 FIFO="/tmp/backpipe"
 PROJECT_DIR="../src/homemadeTorrent"
 
 N=3
 rm -f "$FIFO"
 mkfifo "$FIFO"
+
+mkdir -p $LOG_DIR
 
 # Construction de la liste des membres
 IDS=""
