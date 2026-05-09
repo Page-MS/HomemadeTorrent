@@ -4,6 +4,7 @@ import (
 	"HomemadeTorrent/pkg/snapshot"
 	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
+	"os/exec"
 	"sort"
 
 	"HomemadeTorrent/pkg/clock"
@@ -40,6 +41,7 @@ var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
 	torrentlogic.TransferRelatedMessage: {},
 	torrentlogic.AskingForShasum:        {},
 	torrentlogic.AskingForContent:       {},
+	"TEST":                              {},
 }
 
 // NewController initialise un nouveau dispatcher central
@@ -99,11 +101,6 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	log.Printf("[CONTROLLER][NETWORK] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
 
-	//if isApplicationMessage(pMsg.Action) && c.Snapshot.MyColor == snapshot.White {
-	//	log.Printf("[TEST] Bilan++ anticipé sur %s", pMsg.Action)
-	//	c.Snapshot.Bilan++
-	//}
-
 	// -------------- Routage ------------------------
 	processLocal, forward := c.routeMessage(pMsg)
 
@@ -150,6 +147,17 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		msgSnapshot := c.triggerLocalSnapshot(false, c.getSiteIndexFromID(initiatorID))
 		if msgSnapshot != "" {
 			responses = append(responses, msgSnapshot)
+		}
+
+		// Lance le script avec un argument
+		log.Printf("[TEST] SIte ID: %s\n", c.SiteID)
+		if c.SiteID == "1" {
+			log.Printf("[TEST] Fake recepetion enclenchée\n")
+			cmd := exec.Command("../../simulations/msg.sh")
+			_, err := cmd.CombinedOutput()
+			if err != nil {
+				log.Println("Erreur :", err)
+			}
 		}
 	}
 
@@ -217,6 +225,7 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	//Maj du bilan
 	if isApplicationMessage(pMsg.Action) {
 		c.Snapshot.Bilan++
+		log.Printf("[SNAPSHOT][LOCAL] Création d'un message applicatif | Bilan: %d\n", c.Snapshot.Bilan)
 	}
 	// Maj couleur
 	pMsg.Color = string(c.Snapshot.MyColor)

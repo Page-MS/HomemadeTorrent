@@ -45,6 +45,7 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID int) str
 
 	// Si on est l'initiateur, on initialise le comptage
 	if isInitiator {
+		c.Snapshot.Bilan++
 		c.Snapshot.NbEtatsAttendus = len(c.NetworkDirectory.IndexToID) - 1
 		c.Snapshot.NbMsgAttendus = c.Snapshot.Bilan
 		c.Snapshot.CollectedStates = []snapshot.SiteState{}
@@ -66,16 +67,16 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID int) str
 // formatPrepostForInitiator prépare le transfert d'un message prépost
 func (c *Controller) formatPrepostForInitiator(pMsg parser.Message) string {
 	// Un message prépost est un message envoyé blanc reçu rouge
-	raw, err := parser.Encode(pMsg)
+	jsonMsg, err := json.Marshal(pMsg)
 	if err != nil {
-		log.Printf("[SNPASHOT][PREPOST] Erreur encodage du prepost: %v\n", err)
+		log.Printf("[SNPASHOT][PREPOST] Erreur serialisation JSON du prepost: %v\n", err)
 	}
 	prepost := parser.Message{
 		Id:      uuid.New().String(),
 		Action:  snapshot.PREPOST_COLLECT,
 		Sender:  c.SiteID,
 		Dest:    c.getIdFromSIteIndex(c.Snapshot.InitiatorID),
-		Payload: raw,                  // message d'origine
+		Payload: string(jsonMsg),      // message d'origine
 		Color:   string(snapshot.Red), // message de controles sont rouges
 		Stamp:   c.Lamport.GetValue(),
 		Vect:    c.Vector.GetCopy(),

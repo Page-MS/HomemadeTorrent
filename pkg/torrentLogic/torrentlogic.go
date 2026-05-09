@@ -154,7 +154,6 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		for n := range transfersResultsChannel {
-			log.Printf("[TORRENT] JE RECOIS QUELQUE CHOSE\n")
 			transfer.partsCompletedIDs = append(transfer.partsCompletedIDs, n)
 			transfer.numberOfPartsCompleted++
 			transfer.partsToAskIDs = removeElementFromIntSlice(transfer.partsToAskIDs, n)
@@ -166,7 +165,6 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		}
 	}(&wg)
 	wg.Wait()
-	log.Printf("[TORRENT] JE SORS DU WAIT\n")
 	if len(transfer.partsToAskIDs) == 0 && len(transfer.partsCompletedIDs) == int(file.NumberOfParts) {
 		log.Printf("\n[TORRENT] Transfer for file %s completed successfully !", file.Name)
 	} else {

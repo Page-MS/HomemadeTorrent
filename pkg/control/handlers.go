@@ -125,21 +125,17 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 		}
 		c.Snapshot.CollectedStates = append(c.Snapshot.CollectedStates, remoteState)
 		log.Printf("[SNAPSHOT] État reçu de %s (Bilan: %d). Attente de %d messages restants.", pMsg.Sender, pMsg.Bilan, c.Snapshot.NbMsgAttendus)
+		log.Printf("[SNAPSHOT] Bilan site actuel: %d\n", c.Snapshot.Bilan)
 
 	case snapshot.PREPOST_COLLECT:
 		if c.Snapshot.NbEtatsAttendus > 0 || c.Snapshot.NbMsgAttendus > 0 {
 			c.Snapshot.NbMsgAttendus--
-			raw, err := parser.Encode(pMsg)
-			if err != nil {
-				log.Printf("[SNPASHOT][PREPOST_COLLECT] Erreur encodage du message PREPOST_COLLECT: %v\n", err)
-			}
-			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, raw)
+			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, pMsg.Payload)
 			log.Printf("[SNAPSHOT] Message en vol archivé. Restant : %d", c.Snapshot.NbMsgAttendus)
 
 		} else {
 			log.Printf("[SNAPSHOT] Prepost reçu hors session, ignoré.")
 		}
-		return parser.Message{Action: ""}
 	}
 
 	// terminaison
