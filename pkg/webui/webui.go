@@ -2,14 +2,16 @@ package webui
 
 import (
 	"HomemadeTorrent/pkg/registre"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 )
+
+//go:embed static/*
+var staticFiles embed.FS
 
 type WebUI struct {
 	SiteID    string
@@ -43,8 +45,9 @@ func StartWebUI(siteID string, index int, onMessage func(string), register *regi
 
 func (ui *WebUI) handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-		tmpl, err := template.ParseFiles("pkg/webui/index.html")
+		htmlData, err := staticFiles.ReadFile("static/index.html")
 		if err != nil {
+			log.Printf("[WEBUI] Error reading index.html: %v\n", err)
 			http.Error(w, "Erreur serveur : impossible de charger l'interface", http.StatusInternalServerError)
 			return
 		}
@@ -57,10 +60,21 @@ func (ui *WebUI) handleHome(w http.ResponseWriter, r *http.Request) {
 			Port:   ui.Port,
 		}
 
+		tmpl, err := template.New("index").Parse(string(htmlData))
+		if err != nil {
+			log.Printf("[WEBUI] Error parsing template: %v\n", err)
+			http.Error(w, "Erreur serveur : impossible de charger l'interface", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		tmpl.Execute(w, data)
 		return
 	}
-	http.ServeFileFS(w, r, os.DirFS("./public"), filepath.Base(r.URL.Path))
+
+	// Serve static files from embedded files
+	fileServer := http.FileServer(http.FS(staticFiles))
+	fileServer.ServeHTTP(w, r)
 }
 
 func (ui *WebUI) handleInfo(w http.ResponseWriter, r *http.Request) {

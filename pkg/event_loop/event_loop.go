@@ -171,7 +171,7 @@ func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
 
 func write(msg string) {
 	log.Println("[EVENT_LOOP] Message écrit en sortie:", msg)
-	_, err := fmt.Fprintf(os.Stdout, msg+"\n\n")
+	_, err := fmt.Fprintf(os.Stdout, "%s\n\n", msg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Erreur écriture stdout: %v\n", err)
 	}

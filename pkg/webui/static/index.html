@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Torrent Node: {{.SiteID}}</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-stone-200 text-stone-800 font-mono p-5 m-0">
+    <div class="max-w-4xl mx-auto bg-stone-50 border border-stone-400 p-5 shadow-sm" 
+         x-data="torrentUI()" 
+         @load="init()">
+        
+        <h1 class="text-2xl border-b-2 border-stone-800 pb-2 mb-0">
+            Node: {{.SiteID}} 
+            <span class="font-normal text-sm text-stone-500">(Port: {{.Port}})</span>
+        </h1>
+
+        <div class="grid grid-cols-2 gap-5 mt-5">
+            <!-- Register Information Panel -->
+            <div class="flex-1 min-w-[300px] border border-stone-300 p-4 bg-stone-100">
+                <h2 class="w-full text-lg mt-0 border-b border-dashed border-stone-300 pb-1 mb-3">
+                    Register Information
+                    <span class="ml-auto text-xs text-stone-700">(auto refresh)</span>
+                </h2>
+                <div id="register-info" class="max-h-96 overflow-auto">
+                    <template x-if="files.length === 0">
+                        <p class="italic text-stone-600">No files in register.</p>
+                    </template>
+                    <ul class="m-0 p-0 list-none space-y-2">
+                        <template x-for="file in files" :key="file.id">
+                            <li class="border border-stone-200 bg-white p-3">
+                                <div class="flex justify-between items-start">
+                                    <span class="font-bold" x-text="file.name"></span>
+                                    <span class="text-sm" 
+                                          :class="hasLocalFile(file) ? 'text-green-700 font-bold' : 'text-stone-500'"
+                                          x-text="hasLocalFile(file) ? '[Available Locally]' : '[Available on network]'">
+                                    </span>
+                                </div>
+                                <div class="text-sm text-stone-600 mt-2 pt-2 border-t border-dotted border-stone-200">
+                                    <span x-text="'ID: ' + file.id.slice(0, 10)"></span><br>
+                                    <span x-text="'Parts: ' + file.file_parts.length"></span>
+                                    <template x-if="file.peers_with_file && file.peers_with_file.length">
+                                        <br>
+                                    </template>
+                                    <template x-if="file.peers_with_file && file.peers_with_file.length">
+                                        <span x-text="'Peers: ' + file.peers_with_file.join(', ')"></span>
+                                    </template>
+                                </div>
+                                <template x-if="!hasLocalFile(file) && file.peers_with_file && file.peers_with_file.length">
+                                    <button @click="downloadFile(file.id, file.peers_with_file[0])"
+                                            class="mt-2 bg-stone-200 border border-stone-500 py-0.5 px-1 text-stone-800 hover:bg-stone-300 transition-colors">
+                                        Télécharger
+                                    </button>
+                                </template>
+                            </li>
+                        </template>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Send Message Panel -->
+            <div class="flex-1 min-w-[300px] border border-stone-300 p-4 bg-stone-100">
+                <h2 class="text-lg mt-0 border-b border-dashed border-stone-300 pb-1 mb-3">
+                    Send Message
+                </h2>
+
+                <form @submit.prevent="sendMessage(message)" class="flex flex-col gap-2">
+                    <label for="message" class="text-sm">Raw Message:</label>
+                    <textarea id="message" 
+                              x-model="message"
+                              rows="6" 
+                              class="w-full box-border border-2 border-stone-400 p-2 font-mono"
+                              placeholder='ACTION:...'></textarea>
+
+                    <button type="submit"
+                            :disabled="isSending"
+                            class="self-start bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors disabled:opacity-50">
+                        <span x-text="isSending ? '[ Sending... ]' : '[ Send ]'"></span>
+                    </button>
+                </form>
+
+                <!-- Status Messages -->
+                <template x-if="statusMessage">
+                    <div :class="'mt-3 p-2 border font-bold text-sm ' + (statusIsError ? 'border-red-600 bg-red-50 text-red-700' : 'border-green-600 bg-green-50 text-green-700')"
+                         x-text="statusMessage">
+                    </div>
+                </template>
+
+                <h2 class="text-lg mt-4 border-b border-dashed border-stone-300 pb-1 mb-3">
+                    Send Hooks
+                </h2>
+                <div class="space-y-2">
+                    <button @click="sendHook('ACTION:LOCAL_SC_REQUEST\nDEST:{{.SiteID}}\n\n')"
+                            class="block bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
+                        [ START SC ]
+                    </button>
+                    <button @click="sendHook('ACTION:MARKER\nID:snap_start\nDEST:{{.SiteID}}\nSENDER:USER\n\n')"
+                            class="block bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
+                        [ START SNAPSHOT ]
+                    </button>
+                </div>
+            </div>
+
+            <!-- Logs Panel -->
+            <div class="col-span-2">
+                <h2 class="text-lg mt-0 border-b border-dashed border-stone-300 pb-1 mb-3">Logs:</h2>
+                <div id="logs" class="bg-stone-100 border border-stone-300 p-3 font-mono text-sm max-h-48 overflow-auto">
+                    <p x-show="logs.length === 0" class="text-stone-500">No logs yet...</p>
+                    <template x-for="log in logs" :key="log.id">
+                        <div class="text-stone-700 border-b border-stone-200 py-1" x-text="log.message"></div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function torrentUI() {
+            return {
+                siteId: '{{.SiteID}}',
+                files: [],
+                message: '',
+                statusMessage: '',
+                statusIsError: false,
+                isSending: false,
+                logs: [],
+                logCounter: 0,
+                updateInterval: null,
+
+                async init() {
+                    await this.refreshFiles();
+                    this.updateInterval = setInterval(() => this.refreshFiles(), 10000);
+                    this.addLog('UI initialized for {{.SiteID}}');
+                },
+
+                async refreshFiles() {
+                    try {
+                        const response = await fetch('/api/info');
+                        if (!response.ok) throw new Error('Failed to fetch');
+                        const data = await response.json();
+                        this.files = data.Files || [];
+                    } catch (err) {
+                        console.error('Error refreshing files:', err);
+                        this.showStatus('Failed to load files', true);
+                    }
+                },
+
+                hasLocalFile(file) {
+                    return file.peers_with_file?.includes(this.siteId);
+                },
+
+                async sendMessage(msg) {
+                    if (!msg.trim()) return;
+                    
+                    this.isSending = true;
+                    try {
+                        const formData = new URLSearchParams();
+                        formData.append('message', msg);
+
+                        const response = await fetch('/api/send', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: formData
+                        });
+
+                        if (response.ok) {
+                            this.showStatus('Message sent successfully!', false);
+                            this.message = '';
+                            this.addLog('Message sent');
+                        } else {
+                            this.showStatus('Failed to send message: ' + response.statusText, true);
+                        }
+                    } catch (err) {
+                        console.error('Error sending message:', err);
+                        this.showStatus('Network error while sending', true);
+                    } finally {
+                        this.isSending = false;
+                    }
+                },
+
+                async sendHook(msg) {
+                    this.isSending = true;
+                    try {
+                        const formData = new URLSearchParams();
+                        formData.append('message', msg);
+
+                        const response = await fetch('/api/send', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: formData
+                        });
+
+                        if (response.ok) {
+                            this.showStatus('Hook sent successfully!', false);
+                            this.addLog('Hook sent');
+                        } else {
+                            this.showStatus('Failed to send hook', true);
+                        }
+                    } catch (err) {
+                        console.error('Error sending hook:', err);
+                        this.showStatus('Network error', true);
+                    } finally {
+                        this.isSending = false;
+                    }
+                },
+
+                async downloadFile(fileId, dest) {
+                    const payload = `FileID;${fileId}\n`;
+                    const msg = `ACTION:StartTransfers
+DEST:${this.siteId}
+PAYLOAD_LEN:${payload.length}
+${payload}
+`;
+                    await this.sendMessage(msg);
+                },
+
+                showStatus(msg, isError) {
+                    this.statusMessage = msg;
+                    this.statusIsError = isError;
+                    setTimeout(() => {
+                        this.statusMessage = '';
+                    }, 3000);
+                },
+
+                addLog(message) {
+                    this.logs.unshift({
+                        id: this.logCounter++,
+                        message: `[${new Date().toLocaleTimeString()}] ${message}`
+                    });
+                    if (this.logs.length > 50) {
+                        this.logs.pop();
+                    }
+                },
+
+                destroy() {
+                    if (this.updateInterval) {
+                        clearInterval(this.updateInterval);
+                    }
+                }
+            };
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            // Will be called when page closes
+        });
+    </script>
+</body>
+
+</html>
