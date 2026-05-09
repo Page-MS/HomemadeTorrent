@@ -1,4 +1,0 @@
-#!/bin/sh
-
-# Simuler une demande de snapshot émise par le site 1
-printf "ACTION:MARKER\nID:snap_test\nDEST:1\nSENDER:USER\nVECT:0,0,0\n\n" > /tmp/backpipe
