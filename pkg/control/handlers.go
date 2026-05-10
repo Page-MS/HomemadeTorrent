@@ -84,7 +84,7 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 			}
 
 			// Action de Snapshot (Sauvegarde + Envoi de l'état si on n'est pas l'initiateur)
-			c.triggerLocalSnapshot(isGlobalInitiator, c.getSiteIndexFromID(initiatorID))
+			c.triggerLocalSnapshot(isGlobalInitiator, initiatorID)
 
 			// On prépare le Marker pour le voisin suivant
 			pMsg.Sender = initiatorID // On garde l'ID du vrai initiateur
@@ -129,17 +129,11 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 	case snapshot.PREPOST_COLLECT:
 		if c.Snapshot.NbEtatsAttendus > 0 || c.Snapshot.NbMsgAttendus > 0 {
 			c.Snapshot.NbMsgAttendus--
-			raw, err := parser.Encode(pMsg)
-			if err != nil {
-				log.Printf("[SNPASHOT][PREPOST_COLLECT] Erreur encodage du message PREPOST_COLLECT: %v\n", err)
-			}
-			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, raw)
+			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, pMsg.Payload)
 			log.Printf("[SNAPSHOT] Message en vol archivé. Restant : %d", c.Snapshot.NbMsgAttendus)
-
 		} else {
 			log.Printf("[SNAPSHOT] Prepost reçu hors session, ignoré.")
 		}
-		return parser.Message{Action: ""}
 	}
 
 	// terminaison
@@ -184,7 +178,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			if !exist {
 				inputChan = make(chan torrentlogic.Message, 100)
 				c.InputTorrentTransfers[msgTorrent.TransferID] = inputChan
-				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Register, inputChan, c.OutputTorrentChan)
+				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Reg, inputChan, c.OutputTorrentChan)
 			}
 			inputChan <- msgTorrent
 			return parser.Message{}
@@ -198,7 +192,8 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 				msgTorrent.SenderID,
 				msgTorrent.FileID,
 				msgTorrent.PartID,
-				c.Register,
+				msgTorrent.TransferID,
+				c.Reg,
 				c.OutputTorrentChan,
 			)
 		}
@@ -209,7 +204,8 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			msgTorrent.SenderID,
 			msgTorrent.FileID,
 			msgTorrent.PartID,
-			c.Register,
+			msgTorrent.TransferID,
+			c.Reg,
 			c.OutputTorrentChan,
 		)
 	}

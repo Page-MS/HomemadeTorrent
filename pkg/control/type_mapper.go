@@ -34,6 +34,15 @@ func (c *Controller) ParserMessageToTorrentMessage(pMsg parser.Message) (torrent
 	if pMsg.Payload == "" {
 		return torrentlogic.Message{}, fmt.Errorf("[MAPPER] Payload vide, impossible de convertir en un message torrent\n")
 	}
+
+	if pMsg.Action == string(torrentlogic.StartTransfers) {
+		msgTorrent, err := parser.DecodeStartTransferPayload(pMsg.Payload)
+		if err != nil {
+			return torrentlogic.Message{}, fmt.Errorf("[MAPPER] Impossible de décoder le payload StartTransfers: %v\n", err)
+		}
+		return msgTorrent, nil
+	}
+
 	torrentMsgType, err := parser.DecodeTorrentPayload(pMsg.Payload)
 	if err != nil {
 		return torrentlogic.Message{}, fmt.Errorf("[MAPPER] Impossible de décoder le payload torrent: %v\n", err)

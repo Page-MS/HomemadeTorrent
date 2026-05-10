@@ -29,7 +29,6 @@ type Controller struct {
 	Snapshot              *snapshot.Snapshot
 	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
 	OutputTorrentChan     chan torrentlogic.Message
-	Register              *registre.Registre
 }
 
 // Adapter cette valeur en focntion de la convention choisie
@@ -41,6 +40,7 @@ var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
 	torrentlogic.TransferRelatedMessage: {},
 	torrentlogic.AskingForShasum:        {},
 	torrentlogic.AskingForContent:       {},
+	//"TEST":                              {}, // TODO: debug prepost
 }
 
 // NewController initialise un nouveau dispatcher central
@@ -63,7 +63,7 @@ func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Co
 		},
 		InputTorrentTransfers: make(map[string]chan torrentlogic.Message),
 		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
-		Register:              r,
+		Reg:                   r,
 	}
 }
 
@@ -99,11 +99,6 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	log.Printf("[CONTROLLER][NETWORK] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
-
-	//if isApplicationMessage(pMsg.Action) && c.Snapshot.MyColor == snapshot.White {
-	//	log.Printf("[TEST] Bilan++ anticipé sur %s", pMsg.Action)
-	//	c.Snapshot.Bilan++
-	//}
 
 	// -------------- Routage ------------------------
 	processLocal, forward := c.routeMessage(pMsg)
@@ -144,22 +139,42 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// Si on reçoit rouge alors qu'on est blanc on peut notre instantané avant de traiter le message.
-	if pMsg.Color == string(snapshot.Red) && c.Snapshot.MyColor == snapshot.White {
+	if pMsg.Color == string(snapshot.Red) && c.Snapshot.MyColor == snapshot.White && pMsg.Action == snapshot.MARKER {
 		log.Printf("[SNAPSHOT] Lestage détecté (Msg ROUGE sur Site BLANC). Clic forcé.")
 		initiatorID := pMsg.Sender
 
-		msgSnapshot := c.triggerLocalSnapshot(false, c.getSiteIndexFromID(initiatorID))
+		msgSnapshot := c.triggerLocalSnapshot(false, initiatorID)
 		if msgSnapshot != "" {
 			responses = append(responses, msgSnapshot)
 		}
+
+		// Lance le script avec un argument //TODO : Debug prépost (a enlever)
+		/*
+			if c.SiteID == "1" {
+				log.Printf("[TEST] Fake recepetion enclenchée\n")
+				cmd := exec.Command("../../simulations/msg.sh")
+				_, err := cmd.CombinedOutput()
+				if err != nil {
+					log.Println("Erreur :", err)
+				}
+			}
+		*/
 	}
 
 	// Détection des messages Prépost : Envoyé blanc, reçu rouge
 	if pMsg.Color == string(snapshot.White) && c.Snapshot.MyColor == snapshot.Red && isApplicationMessage(pMsg.Action) {
-		log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
+		// si on est initiateur pas besoin de créer un message
+		var responseMsg string
+		if c.Snapshot.IsInitiator {
+			log.Printf("[SNAPSHOT] Message Prépost identifié. Ajout à la liste.")
+			responseMsg = c.addPrepostToSnapshot(pMsg)
+
+		} else {
+			log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
+			responseMsg = c.formatPrepostForInitiator(pMsg)
+		}
 		// On crée un message de contrôle pour envoyer ce contenu à l'initiateur
-		prepostMsg := c.formatPrepostForInitiator(pMsg)
-		responses = append(responses, prepostMsg)
+		responses = append(responses, responseMsg)
 	}
 
 	// ------------- Logique controler --------------
@@ -218,6 +233,7 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	//Maj du bilan
 	if isApplicationMessage(pMsg.Action) {
 		c.Snapshot.Bilan++
+		log.Printf("[SNAPSHOT][LOCAL] Création d'un message applicatif | Bilan: %d\n", c.Snapshot.Bilan)
 	}
 	// Maj couleur
 	pMsg.Color = string(c.Snapshot.MyColor)

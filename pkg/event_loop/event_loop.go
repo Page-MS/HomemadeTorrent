@@ -44,10 +44,11 @@ func Start(allSiteIDs []string, siteID string) {
 	processingChan := make(chan Event, 100)
 
 	// Init Controler et Registre
-	register := registre.NewRegistre()
-	registre.MakeInitialHardcodedRegister(register, "./bin/baseFiles", "./bin/parts")
-	registre.InitialiseRegistre(siteID, register)
-	controler := control.NewController(siteID, allSiteIDs, register)
+	register := registre.Registre{}
+	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
+	registre.InitialiseRegistre(siteID, &register)
+
+	controler := control.NewController(siteID, allSiteIDs, &register)
 
 	go listenStdEntry(eventQueue)
 	go listenUserInput(eventQueue, siteID)
@@ -86,6 +87,9 @@ func Start(allSiteIDs []string, siteID string) {
 func listenStdEntry(queue chan<- Event) {
 	//fmt.Println("DEBUG: Le lecteur clavier est bien lancé")
 	scanner := bufio.NewScanner(os.Stdin)
+	const maxCapacity = 10 * 1024 * 1024 // 10 Mo pour pouvoir envoyer le registre
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, maxCapacity)
 	var buffer strings.Builder
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -121,6 +125,9 @@ func listenUserInput(queue chan<- Event, siteID string) {
 		defer f.Close()
 
 		scanner := bufio.NewScanner(f)
+		const maxCapacity = 10 * 1024 * 1024 // 10 Mo pour pouvoir envoyer le registre
+		buf := make([]byte, 64*1024)
+		scanner.Buffer(buf, maxCapacity)
 		var buffer strings.Builder
 		for scanner.Scan() {
 			line := scanner.Text()

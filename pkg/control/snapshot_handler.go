@@ -16,7 +16,7 @@ import (
 )
 
 // triggerLocalSnapshot effectue l'action de "clic"
-func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID int) string {
+func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID string) string {
 	// passage au rouge
 	c.Snapshot.MyColor = snapshot.Red
 	c.Snapshot.IsInitiator = isInitiator
@@ -45,6 +45,7 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID int) str
 
 	// Si on est l'initiateur, on initialise le comptage
 	if isInitiator {
+		//c.Snapshot.Bilan++ //TODO : Debug prépost (a enlever)
 		c.Snapshot.NbEtatsAttendus = len(c.NetworkDirectory.IndexToID) - 1
 		c.Snapshot.NbMsgAttendus = c.Snapshot.Bilan
 		c.Snapshot.CollectedStates = []snapshot.SiteState{}
@@ -66,16 +67,16 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID int) str
 // formatPrepostForInitiator prépare le transfert d'un message prépost
 func (c *Controller) formatPrepostForInitiator(pMsg parser.Message) string {
 	// Un message prépost est un message envoyé blanc reçu rouge
-	raw, err := parser.Encode(pMsg)
+	jsonMsg, err := json.Marshal(pMsg)
 	if err != nil {
-		log.Printf("[SNPASHOT][PREPOST] Erreur encodage du prepost: %v\n", err)
+		log.Printf("[SNPASHOT][PREPOST] Erreur serialisation JSON du prepost: %v\n", err)
 	}
 	prepost := parser.Message{
 		Id:      uuid.New().String(),
 		Action:  snapshot.PREPOST_COLLECT,
 		Sender:  c.SiteID,
-		Dest:    c.getIdFromSIteIndex(c.Snapshot.InitiatorID),
-		Payload: raw,                  // message d'origine
+		Dest:    c.Snapshot.InitiatorID,
+		Payload: string(jsonMsg),      // message d'origine
 		Color:   string(snapshot.Red), // message de controles sont rouges
 		Stamp:   c.Lamport.GetValue(),
 		Vect:    c.Vector.GetCopy(),
@@ -102,7 +103,7 @@ func (c *Controller) sendStateOnRing() string {
 		Sender:  c.SiteID,
 		Stamp:   c.Lamport.GetValue(),
 		Vect:    c.Vector.GetCopy(),
-		Dest:    c.getIdFromSIteIndex(c.Snapshot.InitiatorID),
+		Dest:    c.Snapshot.InitiatorID,
 		Bilan:   c.Snapshot.Bilan, // transmet notre bilan à l'initiateur
 		Color:   string(snapshot.Red),
 		Payload: jsonReg,
@@ -187,4 +188,33 @@ func (c *Controller) finalizeSnapshot() parser.Message {
 	}
 	log.Println("[SNAPSHOT] Système prêt pour une nouvelle sauvegarde.")
 	return resetMsg
+}
+
+// addPrepostToSnapshot ajoute un message identifié comme prépost à la snapshot
+func (c *Controller) addPrepostToSnapshot(pMsg parser.Message) string {
+	// Un message prépost est un message envoyé blanc reçu rouge
+	jsonMsg, err := json.Marshal(pMsg)
+	if err != nil {
+		log.Printf("[SNPASHOT][PREPOST] Erreur serialisation JSON du prepost: %v\n", err)
+	}
+
+	if c.Snapshot.NbEtatsAttendus > 0 || c.Snapshot.NbMsgAttendus > 0 {
+		c.Snapshot.NbMsgAttendus--
+		c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, string(jsonMsg))
+		log.Printf("[SNAPSHOT] Message en vol archivé. Restant : %d", c.Snapshot.NbMsgAttendus)
+	} else {
+		log.Printf("[SNAPSHOT] Prepost reçu hors session, ignoré.")
+	}
+
+	// terminaison
+	if c.Snapshot.NbEtatsAttendus == 0 && c.Snapshot.NbMsgAttendus == 0 {
+		resetMsg := c.finalizeSnapshot()
+		stringResetMsg, err := parser.Encode(resetMsg)
+		if err != nil {
+			log.Printf("[SNAPSHOT][ERROR] Erreur encodage message prépost : %v\n", err)
+			return ""
+		}
+		return stringResetMsg
+	}
+	return ""
 }
