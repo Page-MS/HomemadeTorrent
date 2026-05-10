@@ -2,6 +2,9 @@ package event_loop
 
 import (
 	"HomemadeTorrent/pkg/control"
+	"HomemadeTorrent/pkg/parser"
+	"HomemadeTorrent/pkg/registre"
+	"HomemadeTorrent/pkg/webui"
 	"bufio"
 	"fmt"
 	"log"
@@ -32,20 +35,20 @@ type Event struct {
 }
 
 func Start(allSiteIDs []string, siteID string) {
-	// Def des logs
-	logFile, _ := os.Create(siteID + ".log")
-	log.SetOutput(logFile)
-
 	// Channels
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
-	localUserChan := make(chan string, 100)
 
-	// Controler et app torrent
-	controler := control.NewController(siteID, allSiteIDs)
+	// Init Controler et Registre
+	register := registre.Registre{}
+	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
+	registre.InitialiseRegistre(siteID, &register)
+
+	controler := control.NewController(siteID, allSiteIDs, &register)
 
 	go listenStdEntry(eventQueue)
-	go listenUserInput(localUserChan, eventQueue)
+	go listenUserUIInput(eventQueue, siteID, controler, &register)
+	go listenLocalTorrentOutput(eventQueue, controler)
 	go siteLogic(processingChan, eventQueue, controler)
 
 	log.Printf("[EVENT_LOOP] START\n")
@@ -68,6 +71,9 @@ func Start(allSiteIDs []string, siteID string) {
 func listenStdEntry(queue chan<- Event) {
 	//fmt.Println("DEBUG: Le lecteur clavier est bien lancé")
 	scanner := bufio.NewScanner(os.Stdin)
+	const maxCapacity = 10 * 1024 * 1024 // 10 Mo pour pouvoir envoyer le registre
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, maxCapacity)
 	var buffer strings.Builder
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -77,7 +83,7 @@ func listenStdEntry(queue chan<- Event) {
 				msg := buffer.String()
 				buffer.Reset()
 
-				log.Printf("[EVENT_LOOP] Message lu en entrée: %s\n", msg)
+				log.Printf("[EVENT_LOOP] Message réseau lu en entrée: %s\n", msg)
 
 				queue <- Event{
 					Type:   ReadMessage,
@@ -96,19 +102,40 @@ func listenStdEntry(queue chan<- Event) {
 	}
 }
 
-func listenUserInput(userInputChan <-chan string, queue chan<- Event) {
-	for msg := range userInputChan {
+// interface web
+func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Controller, register *registre.Registre) {
+	onMsg := func(msg string) {
 		queue <- Event{
 			Type:   ReadMessage,
 			Source: FromLocalUser,
 			Data:   msg,
 		}
 	}
+	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register)
+}
+
+func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
+	for msg := range c.OutputTorrentChan {
+		ctrlMsg, err := c.TorrentMessageToParserMessage(msg)
+		if err != nil {
+			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
+		}
+		strMsg, err := parser.Encode(ctrlMsg)
+		if err != nil {
+			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
+		}
+
+		queue <- Event{
+			Type:   ReadMessage,
+			Source: FromLocalUser,
+			Data:   strMsg,
+		}
+	}
 }
 
 func write(msg string) {
 	log.Println("[EVENT_LOOP] Message écrit en sortie:", msg)
-	_, err := fmt.Fprintf(os.Stdout, msg+"\n\n")
+	_, err := fmt.Fprintf(os.Stdout, "%s\n\n", msg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Erreur écriture stdout: %v\n", err)
 	}

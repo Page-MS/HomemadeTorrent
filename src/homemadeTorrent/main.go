@@ -1,12 +1,9 @@
 package main
 
 import (
-	"HomemadeTorrent/pkg/registre"
-	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
-	"fmt"
+	"HomemadeTorrent/pkg/event_loop"
 	"log"
 	"os"
-	"time"
 )
 
 func main() {
@@ -19,25 +16,10 @@ func main() {
 	}
 
 	siteID := args[0]
-	reg := registre.Registre{}
-	registre.MakeInitialHardcodedRegister(&reg, "./bin/baseFiles", "./bin/parts")
-	registre.InitialiseRegistre(siteID, &reg)
+	allSiteIDs := args[1:]
 
-	MessageChannelForTransfer := make(chan torrentlogic.Message)
-	outputChannel := make(chan torrentlogic.Message)
+	//log.Printf("Shasum: %s\n", registre.CalculateShasum("../../bin/baseFiles/decoyduck.png"))
 
-	// Launch a goroutine to receive outgoing messages
-	go func() {
-		for msg := range outputChannel {
-			fmt.Printf("\nOutgoing message received: %+v\n", msg)
-		}
-	}()
-
-	// Launch transfers in separate goroutines
-	go torrentlogic.StartOutgoingTransfer("1", "3628364a96f7d5dc7b383b9ea5c5415c20cbdfd5fa437c92b7d0038f456e25f2", siteID, &reg, MessageChannelForTransfer, outputChannel)
-
-	torrentlogic.HandlePeerAskingIfWeHavePart(siteID, "Alexis", "3628364a96f7d5dc7b383b9ea5c5415c20cbdfd5fa437c92b7d0038f456e25f2", 2, &reg, outputChannel)
-
-	// Keep main running
-	time.Sleep(50 * time.Second)
+	// Lancement boucle
+	event_loop.Start(allSiteIDs, siteID)
 }

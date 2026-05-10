@@ -1,11 +1,15 @@
 package control
 
 import (
+	"HomemadeTorrent/pkg/registre"
 	"HomemadeTorrent/pkg/snapshot"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
 
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
+
+	"github.com/google/uuid"
 )
 
 // handleDistributedFile fait le lien avec distributed_file.go
@@ -27,6 +31,10 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 		isReady = c.DistFile.SCStopFromNetwork(msgCtrl)
 	case distributed_file.ACK:
 		isReady = c.DistFile.AckFromNetwork(msgCtrl)
+	case distributed_file.LOCAL_SC_REQUEST:
+		responseMsg = c.DistFile.SCRequestFromBaseApp()
+	case distributed_file.LOCAL_SC_LIBERATION:
+		responseMsg = c.DistFile.SCStopFromBaseApp()
 	}
 
 	if isReady {
@@ -60,30 +68,62 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 		return pMsg
 	}
 
-	// Si on reçoit un MARKER et qu'on est blanc, on devient initiateur
-	if pMsg.Action == snapshot.MARKER && c.Snapshot.MyColor == snapshot.White {
-		log.Printf("[SNAPSHOT] Déclenchement initié par MARKER réseau.")
-		c.triggerLocalSnapshot(true)
-		pMsg.Sender = c.SiteID
-		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
-		pMsg.Color = string(snapshot.Red)
-		pMsg.Vect = c.Vector.GetCopy()
-		pMsg.Stamp = c.Lamport.GetValue()
-		return pMsg
-	}
+	if pMsg.Action == snapshot.MARKER {
 
-	if !c.Snapshot.IsInitiator {
-		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
-		pMsg.Vect = c.Vector.GetCopy()
-		pMsg.Stamp = c.Lamport.GetValue()
-		return pMsg
+		// on est BLANC (Premier Marker reçu)
+		if c.Snapshot.MyColor == snapshot.White {
+			log.Printf("[SNAPSHOT] Premier MARKER reçu de %s. Clic !", pMsg.Sender)
+
+			// On détermine si on est l'initiateur global (reçu de l'extérieur)
+			isGlobalInitiator := pMsg.Sender == "USER"
+
+			// On définit l'ID de l'initiateur (soit nous, soit celui qui nous l'envoie)
+			initiatorID := pMsg.Sender
+			if isGlobalInitiator {
+				initiatorID = c.SiteID
+			}
+
+			// Action de Snapshot (Sauvegarde + Envoi de l'état si on n'est pas l'initiateur)
+			c.triggerLocalSnapshot(isGlobalInitiator, initiatorID)
+
+			// On prépare le Marker pour le voisin suivant
+			pMsg.Sender = initiatorID // On garde l'ID du vrai initiateur
+			pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+			pMsg.Color = string(snapshot.Red)
+
+			return pMsg // On envoie le Marker au suivant
+		}
+
+		// On est déjà ROUGE (Le Marker a fait le tour ou arrive par un autre canal)
+		if c.Snapshot.MyColor == snapshot.Red {
+			if c.Snapshot.IsInitiator {
+				log.Printf("[SNAPSHOT] Marker revenu à l'initiateur. Fin.")
+				return parser.Message{} // L'initiateur arrête la boucle
+			} else {
+				log.Printf("[SNAPSHOT] Marker reçu alors que déjà rouge. Propagation simple.")
+				pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+				return pMsg // On laisse le Marker finir son tour d'anneau
+			}
+		}
 	}
 
 	switch pMsg.Action {
 	case snapshot.STATE_COLLECT:
 		c.Snapshot.NbEtatsAttendus--
 		c.Snapshot.NbMsgAttendus += pMsg.Bilan
-		// TODO : c.Snapshot.CollectedStates = append(registre serialiser dans payload)
+		distantReg := &registre.Registre{}
+
+		// 2. Décoder la string JSON reçue dans le payload
+		err := distantReg.FromJSON(pMsg.Payload)
+		if err != nil {
+			log.Printf("[SNAPSHOT][ERROR] Désérialisation de %s: %v", pMsg.Sender, err)
+		}
+		remoteState := snapshot.SiteState{
+			SiteID:   pMsg.Sender,
+			Register: *distantReg,
+			Vector:   pMsg.Vect,
+		}
+		c.Snapshot.CollectedStates = append(c.Snapshot.CollectedStates, remoteState)
 		log.Printf("[SNAPSHOT] État reçu de %s (Bilan: %d). Attente de %d messages restants.", pMsg.Sender, pMsg.Bilan, c.Snapshot.NbMsgAttendus)
 
 	case snapshot.PREPOST_COLLECT:
@@ -91,11 +131,9 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 			c.Snapshot.NbMsgAttendus--
 			c.Snapshot.CollectedPreposts = append(c.Snapshot.CollectedPreposts, pMsg.Payload)
 			log.Printf("[SNAPSHOT] Message en vol archivé. Restant : %d", c.Snapshot.NbMsgAttendus)
-
 		} else {
 			log.Printf("[SNAPSHOT] Prepost reçu hors session, ignoré.")
 		}
-		return parser.Message{Action: ""}
 	}
 
 	// terminaison
@@ -107,7 +145,70 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 	return parser.Message{}
 }
 
-// TODO: handleTorrent pour les messages de fichiers
-func (c *Controller) handleTorrent(pMsg parser.Message) {
-	log.Printf("[TORRENT] Traitement de la pièce %d pour l'objet %s", pMsg.Chunk, pMsg.Object)
+// handleTorrent pour les messages de fichiers
+func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
+	// Si action en lien avec la file répartie alors pas besoin de check le payload
+	switch pMsg.Action {
+	case string(torrentlogic.AskingFromSC):
+		log.Printf("[CONTROLLER] Redirection vers file repartie")
+		pMsg.Action = string(distributed_file.LOCAL_SC_REQUEST)
+		return c.handleDistributedFile(pMsg)
+	case string(torrentlogic.DoneWithSC):
+		log.Printf("[CONTROLLER] Redirection vers file repartie")
+		pMsg.Action = string(distributed_file.LOCAL_SC_LIBERATION)
+		return c.handleDistributedFile(pMsg)
+	}
+
+	// conversion du message Controle vers message torrent
+	msgTorrent, err := c.ParserMessageToTorrentMessage(pMsg)
+	if err != nil {
+		log.Printf("[CONTROLLER] Conversion message controler vers message torrent impossible: %v\n", err)
+		return parser.Message{}
+	}
+
+	switch pMsg.Action {
+	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.StartTransfers):
+		{
+			if len(msgTorrent.TransferID) == 0 {
+				msgTorrent.TransferID = uuid.NewString()
+			}
+
+			// TODO: Voir avec Page quand delete la go-routine (deleteme?)
+			inputChan, exist := c.InputTorrentTransfers[msgTorrent.TransferID]
+			if !exist {
+				inputChan = make(chan torrentlogic.Message, 100)
+				c.InputTorrentTransfers[msgTorrent.TransferID] = inputChan
+				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Reg, inputChan, c.OutputTorrentChan)
+			}
+			inputChan <- msgTorrent
+			return parser.Message{}
+		}
+
+	// Demande si un fichier existe
+	case string(torrentlogic.AskingForShasum):
+		{
+			go torrentlogic.HandlePeerAskingIfWeHavePart(
+				c.SiteID,
+				msgTorrent.SenderID,
+				msgTorrent.FileID,
+				msgTorrent.PartID,
+				msgTorrent.TransferID,
+				c.Reg,
+				c.OutputTorrentChan,
+			)
+		}
+
+	case string(torrentlogic.AskingForContent):
+		torrentlogic.HandlePeerAskingForPartContent(
+			c.SiteID,
+			msgTorrent.SenderID,
+			msgTorrent.FileID,
+			msgTorrent.PartID,
+			msgTorrent.TransferID,
+			c.Reg,
+			c.OutputTorrentChan,
+		)
+	}
+
+	return parser.Message{}
 }

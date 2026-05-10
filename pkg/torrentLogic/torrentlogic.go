@@ -3,13 +3,15 @@ package torrentlogic
 import (
 	"HomemadeTorrent/pkg/registre"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
-type MessageType int
+type MessageType string
 
 type PartTransferStatus int
 
@@ -21,14 +23,15 @@ type TransferRelatedEvent int
 
 const CONNEXION_TIMEOUT = 10 * time.Second
 const SC_TIMEOUT = 10 * CONNEXION_TIMEOUT
+const BIN_PATH = registre.BIN_PATH_FROM_MAIN
+
 const (
-	AskingFromSC MessageType = iota
-	InitiateSC
-	DoneWithSC
-	TransferRelatedMessage
-	AskingForShasum
-	AskingForContent
-	RegisterModification
+	AskingFromSC           MessageType = "AskingFromSC"
+	DoneWithSC             MessageType = "DoneWithSC"
+	TransferRelatedMessage MessageType = "TransferRelatedMessage"
+	StartTransfers         MessageType = "StartTransfers"
+	AskingForShasum        MessageType = "AskingForShasum"
+	AskingForContent       MessageType = "AskingForContent"
 )
 
 // Possible types of messages that can be received that the controller should just pass to the transfer without looking into it
@@ -91,22 +94,22 @@ type ongoingTransfer struct {
 }
 
 type Message struct {
-	messageType          MessageType
-	deleteMe             bool
-	senderID             string
-	transferID           string
-	targetID             string // "" is a broadcast (can be changed if you have another convention)
-	transferRelatedEvent TransferRelatedEvent
-	fileID               string
-	partID               uint // 0 for full file related messages
-	content              string
+	MessageType          MessageType
+	DeleteMe             bool
+	SenderID             string
+	TransferID           string
+	TargetID             string
+	TransferRelatedEvent TransferRelatedEvent
+	FileID               string
+	PartID               uint
+	Content              string
 	register             registre.Registre
 }
 
 // Main function to start a transfer
-// It will then autonomously handle it until it's finished or fails
+// It will then autonomously handle it until it's finished
 func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, error error) {
-	fmt.Print("\nStarting transfer for file ID: ", fileID)
+	log.Print("\n[TORRENT] Starting transfer for file ID: ", fileID)
 	file := reg.GetFileByID(fileID)
 	if file == nil {
 		return false, fmt.Errorf("file with ID %s not found in register", fileID)
@@ -118,7 +121,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	// If we already have the file, we don't need to start the transfer
 	for _, peer := range file.PeersThatHaveFileID {
 		if peer == currentSite {
-			fmt.Printf("\nCurrent site %s already has file %s, no need to start transfer", currentSite, file.Name)
+			log.Printf("\n[TORRENT] Current site %s already has file %s, no need to start transfer", currentSite, file.Name)
 			return true, nil
 		}
 	}
@@ -134,25 +137,35 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	// WaitGroup for synchronizing the transfers goroutines
 	var wg sync.WaitGroup
 	// We make a tab of channels to transmit the messages to the goroutines
-	partIncomingChannels := make([]chan Message, file.NumberOfParts)
-
-	for i := uint(0); i < file.NumberOfParts; i++ {
-		transfer.partsToAskIDs[i] = i
+	partIncomingChannels := make([]chan Message, file.NumberOfParts+1)
+	for i := uint(1); i <= file.NumberOfParts; i++ {
+		transfer.partsToAskIDs[i-1] = i
 		partIncomingChannels[i] = make(chan Message)
-		go StartTransferForPart(transferID, fileID, i, currentSite, reg, transfersResultsChannel, &wg, partIncomingChannels[i], outputMessagesChannel)
 		wg.Add(1)
+		go StartTransferForPart(transferID, fileID, i, currentSite, reg, transfersResultsChannel, &wg, partIncomingChannels[i], outputMessagesChannel)
 	}
 	// Goroutine to dispatch incoming messages to the corresponding part goroutine
 	go func() {
 		for msg := range incomingMessagesChannel {
-			if msg.partID < file.NumberOfParts {
-				partIncomingChannels[msg.partID] <- msg
+			if msg.PartID >= 1 && msg.PartID <= file.NumberOfParts {
+				partIncomingChannels[msg.PartID] <- msg
 			}
 		}
 	}()
 	PrintTransferStatus(transfer)
+	// TODO: Debug prépost
+	/*
+		if currentSite == "3" {
+			log.Printf("[TEST] snapshot enclenchée\n")
+			cmd := exec.Command("../../pkg/user_input/ui_hooks/startSnapshot.sh", "1")
+			_, err := cmd.CombinedOutput()
+			if err != nil {
+				log.Println("Erreur :", err)
+			}
+		}
+	*/
+	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
-		wg.Add(1)
 		for n := range transfersResultsChannel {
 			transfer.partsCompletedIDs = append(transfer.partsCompletedIDs, n)
 			transfer.numberOfPartsCompleted++
@@ -166,14 +179,14 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	}(&wg)
 	wg.Wait()
 	if len(transfer.partsToAskIDs) == 0 && len(transfer.partsCompletedIDs) == int(file.NumberOfParts) {
-		fmt.Printf("\nTransfer for file %s completed successfully !", file.Name)
+		log.Printf("\n[TORRENT] Transfer for file %s completed successfully !", file.Name)
 	} else {
-		fmt.Printf("\nTransfer for file %s completed with errors, parts not received: %v", file.Name, transfer.partsToAskIDs)
+		log.Printf("\n[TORRENT] Transfer for file %s completed with errors, parts not received: %v", file.Name, transfer.partsToAskIDs)
 		return false, nil
 	}
-	error = registre.ReassembleFileFromParts(file.Name, "bin/"+currentSite+"/parts", "bin/"+currentSite+"/reassembled", reg)
+	error = registre.ReassembleFileFromParts(file.Name, BIN_PATH+"/"+currentSite+"/parts", BIN_PATH+"/"+currentSite+"/reassembled", reg)
 	if error != nil {
-		fmt.Printf("\nError while reassembling file %s: %v", file.Name, error)
+		log.Printf("\n[TORRENT] Error while reassembling file %s: %v", file.Name, error)
 		return false, error
 	}
 	fmt.Printf("\nFile %s reassembled successfully !", file.Name)
@@ -225,7 +238,7 @@ func removeElementFromStringSlice(slice []string, element string) []string {
 }
 
 func PrintTransferStatus(transfer *ongoingTransfer) {
-	fmt.Printf("\nTransfer status for file %s\n Number of parts to send: %d\n Number of parts completed: %d\n Is receving ? : %t", transfer.file.Name, len(transfer.partsToAskIDs), transfer.numberOfPartsCompleted, transfer.receiving)
+	log.Printf("\n[TORRENT] Transfer status for file %s\n Number of parts to send: %d\n Number of parts completed: %d\n Is receving ? : %t", transfer.file.Name, len(transfer.partsToAskIDs), transfer.numberOfPartsCompleted, transfer.receiving)
 }
 
 // Handle the transfer for asking a single part of a file, use a channel to indicate its success and ID
@@ -234,31 +247,31 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 	numberOfPeersWithFilePart := len(reg.GetPeersHavingPart(fileID, partID))
 	// If none have it, we cannot start the transfer for this part, we log an error and return
 	if numberOfPeersWithFilePart == 0 {
-		fmt.Printf("\nNo peer has part %d of file %s, cannot start transfer for this part", partID, fileID)
+		log.Printf("\n[TORRENT] No peer has part %d of file %s, cannot start transfer for this part", partID, fileID)
 		err = fmt.Errorf("no peer has part %d of file %s", partID, fileID)
 		channelFin <- partID
 		wg.Done()
 		return err
 	}
-	fmt.Printf("\nStarting transfer for part %d of file %s, number of peers having this part: %d", partID, fileID, numberOfPeersWithFilePart)
+	log.Printf("\n[TORRENT] Starting transfer for part %d of file %s, number of peers having this part: %d", partID, fileID, numberOfPeersWithFilePart)
 	// We take a random peer in the list of peers to not always ask the same peer first
 	peersWithPart := reg.GetPeersHavingPart(fileID, partID)
 	peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
-	fmt.Printf("\nAsking peer %s for part %d of file %s", peerToAsk, partID, fileID)
+	log.Printf("\n[TORRENT] Asking peer %s for part %d of file %s", peerToAsk, partID, fileID)
 	var partTransferWg sync.WaitGroup
 	transferSuccess, err := AskPeerForPart(transferID, peerToAsk, fileID, partID, currentSite, reg, &partTransferWg, incomingMessagesChannel, outputMessagesChannel)
 	if err != nil {
-		fmt.Printf("\nError while asking peer %s for part %d of file %s: %v", peerToAsk, partID, fileID, err)
+		log.Printf("\n[TORRENT] Error while asking peer %s for part %d of file %s: %v", peerToAsk, partID, fileID, err)
 		channelFin <- partID
 		wg.Done()
 		return err
 	}
 	for !transferSuccess {
-		fmt.Printf("\nTransfer for part %d of file %s from peer %s failed, retrying with another peer if available", partID, fileID, peerToAsk)
+		log.Printf("\n[TORRENT] Transfer for part %d of file %s from peer %s failed, retrying with another peer if available", partID, fileID, peerToAsk)
 		// We remove the peer that failed from the list of peers to ask and we try again with another peer if available
 		peersWithPart = removeElementFromStringSlice(peersWithPart, peerToAsk)
 		if len(peersWithPart) == 0 {
-			fmt.Printf("\nNo more peer to ask for part %d of file %s, transfer failed for this part", partID, fileID)
+			log.Printf("\n[TORRENT] No more peer to ask for part %d of file %s, transfer failed for this part", partID, fileID)
 			err = fmt.Errorf("no more peer to ask for part %d of file %s, transfer failed for this part", partID, fileID)
 			channelFin <- partID
 			wg.Done()
@@ -309,64 +322,71 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 
 // Ask a peer for a file part, timeout if unsuccessful
 func AskPeerForPart(transferID string, peerID string, fileID string, partID uint, currentSite string, reg *registre.Registre, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, err error) {
-	fmt.Print("\nAsking peer ", peerID, " for part ", partID, " of file ", fileID)
+	log.Print("\n[TORRENT] Asking peer ", peerID, " for part ", partID, " of file ", fileID)
 	// Send message asking for shasum
-	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, 1, fileID, partID, "", outputMessagesChannel, *reg)
-	// Wait for response or timeout
-	timeout := false
-	go func() {
-		time.Sleep(CONNEXION_TIMEOUT)
-		timeout = true
-	}()
-	if timeout == true {
+	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
+	// Wait for response (shasum) or timeout
+	select {
+	case msg := <-incomingMessagesChannel:
+		if msg.TransferRelatedEvent != ReceivingShasum || msg.PartID != partID || msg.FileID != fileID {
+			return false, fmt.Errorf("unexpected message: %+v", msg)
+		}
+		shasum := msg.Content
+		// Check if the shasum match our register
+		err = HandlePeerRespondingWithShasum(currentSite, peerID, fileID, partID, shasum, reg)
+		if err != nil {
+			return false, err
+		}
+	// Timeout
+	case <-time.After(CONNEXION_TIMEOUT):
 		return false, nil
-	}
-	msg := <-incomingMessagesChannel
-	if msg.transferRelatedEvent != ReceivingShasum || msg.partID != partID || msg.fileID != fileID {
-		return false, fmt.Errorf("unexpected message: %+v", msg)
-	}
-	shasum := msg.content
-	// Check shasum
-	err = HandlePeerRespondingWithShasum(currentSite, peerID, fileID, partID, shasum, reg)
-	if err != nil {
-		return false, err
 	}
 	// Send message asking for content
-	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, 1, fileID, partID, "", outputMessagesChannel, *reg)
-	// Wait for content
-	go func() {
-		time.Sleep(CONNEXION_TIMEOUT)
-		timeout = true
-	}()
-	if timeout == true {
+	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
+	// We wait until we receive the content of the file (hopefully...)
+	select {
+	case msg := <-incomingMessagesChannel:
+		if msg.TransferRelatedEvent != ReceivingContent || msg.PartID != partID || msg.FileID != fileID {
+			return false, fmt.Errorf("unexpected message: %+v", msg)
+		}
+		content := msg.Content
+		file := reg.GetFileByID(fileID)
+		if file == nil {
+			return false, fmt.Errorf("file with ID %s not found in register", fileID)
+		}
+		fileNameWithoutExt := file.Name
+		if idx := strings.LastIndex(file.Name, "."); idx != -1 {
+			fileNameWithoutExt = file.Name[:idx]
+		}
+		partFilePath := fmt.Sprintf("%s/%s/parts/%s_part%d", BIN_PATH, currentSite, fileNameWithoutExt, partID-1)
+		if err := os.MkdirAll(fmt.Sprintf("%s/%s/parts", BIN_PATH, currentSite), 0755); err != nil {
+			return false, fmt.Errorf("could not create parts directory: %v", err)
+		}
+		err = os.WriteFile(partFilePath, []byte(content), 0644)
+		if err != nil {
+			return false, err
+		}
+		// WOHOOO
+		log.Printf("\n[TORRENT] Saved part file: %s\n", partFilePath)
+		return true, nil
+	case <-time.After(CONNEXION_TIMEOUT):
 		return false, nil
 	}
-	msg = <-incomingMessagesChannel
-	if msg.transferRelatedEvent != ReceivingContent || msg.partID != partID || msg.fileID != fileID {
-		return false, fmt.Errorf("unexpected message: %+v", msg)
-	}
-	content := msg.content
-	// Save content to file
-	err = os.WriteFile(fmt.Sprintf("bin/%s/parts/%s_%d", currentSite, fileID, partID), []byte(content), 0644)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // Function called by the controller to answer a request without launching a full transfer
-func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID string, partID uint, reg *registre.Registre, outputMessagesChannel chan<- Message) (err error) {
-	fmt.Printf("\nPeer %s is asking if we have part %d of file %s", peerID, partID, fileID)
+func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID string, partID uint, transferID string, reg *registre.Registre, outputMessagesChannel chan<- Message) (err error) {
+	log.Printf("\n[TORRENT] Peer %s is asking if we have part %d of file %s", peerID, partID, fileID)
 	// We check locally if we can find the part in our local storage
 	// We get the file name
 
-	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "./bin")
+	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, BIN_PATH)
 	if err != nil {
 		return err
 	}
 	// We check for the shasum
 	shasum := registre.CalculateShasum(filePath)
-	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, "", peerID, ReceivingShasum, fileID, partID, shasum, outputMessagesChannel, *reg)
+	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, transferID, peerID, ReceivingShasum, fileID, partID, shasum, outputMessagesChannel, *reg)
 
 	return nil
 }
@@ -385,17 +405,17 @@ func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, 
 		content:              content,
 		register:             reg,
 	}
-	fmt.Printf("\nMessage details:\n Type: %s\n Sender: %s\n Target: %s\n Content: %s", messageName[message.messageType], message.senderID, message.targetID, message.content)
+	log.Printf("\n[TORRENT] Message details:\n Type: %s\n Sender: %s\n Target: %s\n TransferID: %s\n FileID: %s\n PartID: %d\n Content: %s\n", messageName[message.MessageType], message.SenderID, message.TargetID, message.TransferID, message.FileID, message.PartID, message.Content)
 	outputMessagesChannel <- message
 
 }
 
 // Function called by the controller to answer a request without launching a full transfer
-func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID string, partID uint, reg *registre.Registre, outputMessagesChannel chan<- Message) (err error) {
-	fmt.Printf("\nPeer %s is asking for the content of part %d of file %s", peerID, partID, fileID)
+func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID string, partID uint, transferID string, reg *registre.Registre, outputMessagesChannel chan<- Message) (err error) {
+	log.Printf("\n[TORRENT] Peer %s is asking for the content of part %d of file %s", peerID, partID, fileID)
 	// We check locally if we can find the part in our local storage
 	// We get the file name
-	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, "./bin")
+	filePath, err := reg.CheckIfWeHavePartInOurStorage(currentSiteID, fileID, partID, BIN_PATH)
 	if err != nil {
 		return err
 	}
@@ -413,25 +433,25 @@ func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID 
 	filePartContent := make([]byte, fileSize)
 	file.Read(filePartContent)
 	// We send the content of the part to the peer
-	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, "", peerID, ReceivingContent, fileID, partID, string(filePartContent), outputMessagesChannel, *reg)
+	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, transferID, peerID, ReceivingContent, fileID, partID, string(filePartContent), outputMessagesChannel, *reg)
 
 	return nil
 }
 
 // Compare the shasum of the file received and the one expected in the register
 func HandlePeerRespondingWithShasum(currentSiteID string, peerID string, fileID string, partID uint, shasum string, reg *registre.Registre) (err error) {
-	fmt.Printf("\nPeer %s is responding with shasum for part %d of file %s: %s", peerID, partID, fileID, shasum)
+	log.Printf("\n[TORRENT] Peer %s is responding with shasum for part %d of file %s: %s", peerID, partID, fileID, shasum)
 	// We check if the shasum is correct by comparing it with the shasum of the part we have in in the register
 	// We get the file name
 	shasumFromRegister, err := reg.GetShasumOfPart(fileID, partID)
 	if err != nil {
 		return fmt.Errorf("could not get shasum of part %d of file %s from register: %v", partID, fileID, err)
 	}
-	fmt.Printf("\nShasum from register for part %d of file %s: %s", partID, fileID, shasumFromRegister)
+	log.Printf("\n[TORRENT] Shasum from register for part %d of file %s: %s", partID, fileID, shasumFromRegister)
 
 	if shasumFromRegister != shasum {
 		return fmt.Errorf("shasum calculated %s does not match shasum received %s for part %d of file %s", shasumFromRegister, shasum, partID, fileID)
 	}
-	fmt.Printf("\nShasum for part %d of file %s is correct", partID, fileID)
+	log.Printf("\n[TORRENT] Shasum for part %d of file %s is correct", partID, fileID)
 	return nil
 }

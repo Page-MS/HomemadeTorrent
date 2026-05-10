@@ -2,6 +2,7 @@ package control
 
 import (
 	"HomemadeTorrent/pkg/snapshot"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
 	"sort"
 
@@ -17,24 +18,36 @@ type SiteDirectory struct {
 }
 
 type Controller struct {
-	Lamport          *clock.LamportClock
-	Vector           *clock.VectorClock
-	DistFile         *distributed_file.DistributedFile
-	Reg              *registre.Registre
-	SiteID           string          // nom du site
-	SiteIndex        int             // index du site
-	SeenMessages     map[string]bool // Messages déjà vu par le site
-	NetworkDirectory SiteDirectory   // Correspondance SiteId et index
-	Snapshot         *snapshot.Snapshot
+	Lamport               *clock.LamportClock
+	Vector                *clock.VectorClock
+	DistFile              *distributed_file.DistributedFile
+	Reg                   *registre.Registre
+	SiteID                string          // nom du site
+	SiteIndex             int             // index du site
+	SeenMessages          map[string]bool // Messages déjà vu par le site
+	NetworkDirectory      SiteDirectory   // Correspondance SiteId et index
+	Snapshot              *snapshot.Snapshot
+	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
+	OutputTorrentChan     chan torrentlogic.Message
 }
 
 // Adapter cette valeur en focntion de la convention choisie
 const BROADCAST string = "-1"
 
+var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
+	torrentlogic.AskingFromSC:           {},
+	torrentlogic.DoneWithSC:             {},
+	torrentlogic.TransferRelatedMessage: {},
+	torrentlogic.AskingForShasum:        {},
+	torrentlogic.AskingForContent:       {},
+	//"TEST":                              {}, // TODO: debug prepost
+}
+
 // NewController initialise un nouveau dispatcher central
-func NewController(siteID string, allSiteIDs []string) *Controller {
+func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Controller {
 	clk := &clock.LamportClock{}
 	dir := NewSiteDirectory(allSiteIDs)
+
 	return &Controller{
 		Lamport:          clk,
 		Vector:           clock.NewVectorClock(len(allSiteIDs), dir.IDToIndex[siteID]),
@@ -48,6 +61,9 @@ func NewController(siteID string, allSiteIDs []string) *Controller {
 			Bilan:       0,
 			IsInitiator: false,
 		},
+		InputTorrentTransfers: make(map[string]chan torrentlogic.Message),
+		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
+		Reg:                   r,
 	}
 }
 
@@ -75,34 +91,31 @@ func NewSiteDirectory(siteIDs []string) SiteDirectory {
 func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	var responses []string
 
-	log.Printf("[DEBUG-CTRL] Tentative de décodage de : \n%s\n", raw)
 	// -------------- Decodage ------------------
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
-		log.Printf("[DEBUG-CTRL] ERREUR DÉCODAGE : %v\n", err)
+		log.Printf("[CONTROLLER][NETWORK] Erreur decodage: %v\n", err)
 		return responses
 	}
 
-	log.Printf("[CONTROLLER] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
-
-	//if isApplicationMessage(pMsg.Action) && c.Snapshot.MyColor == snapshot.White {
-	//	log.Printf("[TEST] Bilan++ anticipé sur %s", pMsg.Action)
-	//	c.Snapshot.Bilan++
-	//}
+	log.Printf("[CONTROLLER][NETWORK] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
 
 	// -------------- Routage ------------------------
-	// Eviter la duplication des messages causé par BROADCAST
-	if c.SeenMessages[pMsg.Id] {
-		if pMsg.Action == snapshot.MARKER && c.Snapshot.IsInitiator {
+	processLocal, forward := c.routeMessage(pMsg)
+
+	if processLocal && c.SeenMessages[pMsg.Id] {
+		if pMsg.Action == "MARKER" && c.Snapshot.IsInitiator {
 			log.Printf("[SNAPSHOT] Marker revenu à l'initiateur (%s). Fin de la propagation.", c.SiteID)
 			return nil
 		}
-		log.Printf("[ROUTAGE] Message déjà vu (%s), ignoré", pMsg.Id)
+		log.Printf("[ROUTAGE] Message déjà traité (%s), ignoré", pMsg.Id)
 		return responses
 	}
-	c.SeenMessages[pMsg.Id] = true
-	// verifier si le message est pour ce site
-	processLocal, forward := c.routeMessage(pMsg)
+
+	if processLocal {
+		c.SeenMessages[pMsg.Id] = true
+	}
+
 	if forward {
 		responses = append(responses, raw)
 	}
@@ -126,25 +139,47 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// Si on reçoit rouge alors qu'on est blanc on peut notre instantané avant de traiter le message.
-	if pMsg.Color == string(snapshot.Red) && c.Snapshot.MyColor == snapshot.White {
+	if pMsg.Color == string(snapshot.Red) && c.Snapshot.MyColor == snapshot.White && pMsg.Action == snapshot.MARKER {
 		log.Printf("[SNAPSHOT] Lestage détecté (Msg ROUGE sur Site BLANC). Clic forcé.")
-		msgSnapshot := c.triggerLocalSnapshot(false)
+		initiatorID := pMsg.Sender
+
+		msgSnapshot := c.triggerLocalSnapshot(false, initiatorID)
 		if msgSnapshot != "" {
 			responses = append(responses, msgSnapshot)
 		}
+
+		// Lance le script avec un argument //TODO : Debug prépost (a enlever)
+		/*
+			if c.SiteID == "1" {
+				log.Printf("[TEST] Fake recepetion enclenchée\n")
+				cmd := exec.Command("../../simulations/msg.sh")
+				_, err := cmd.CombinedOutput()
+				if err != nil {
+					log.Println("Erreur :", err)
+				}
+			}
+		*/
 	}
 
 	// Détection des messages Prépost : Envoyé blanc, reçu rouge
 	if pMsg.Color == string(snapshot.White) && c.Snapshot.MyColor == snapshot.Red && isApplicationMessage(pMsg.Action) {
-		log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
+		// si on est initiateur pas besoin de créer un message
+		var responseMsg string
+		if c.Snapshot.IsInitiator {
+			log.Printf("[SNAPSHOT] Message Prépost identifié. Ajout à la liste.")
+			responseMsg = c.addPrepostToSnapshot(pMsg)
+
+		} else {
+			log.Printf("[SNAPSHOT] Message Prépost identifié. Envoi à l'initiateur.")
+			responseMsg = c.formatPrepostForInitiator(pMsg)
+		}
 		// On crée un message de contrôle pour envoyer ce contenu à l'initiateur
-		prepostMsg := c.formatPrepostForInitiator(pMsg)
-		responses = append(responses, prepostMsg)
+		responses = append(responses, responseMsg)
 	}
 
 	// ------------- Logique controler --------------
 
-	log.Printf("[CONTROLLER] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
+	log.Printf("[CONTROLLER][NETWORK] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
 
 	// Redirection vers le service aproprié
 	var returnMsg parser.Message
@@ -152,56 +187,89 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	// exclusion mutuelle
 	case string(distributed_file.SC_REQUEST), string(distributed_file.SC_LIBERATION), string(distributed_file.ACK):
-		log.Printf("[CONTROLLER] Appel file répartie\n")
+		log.Printf("[CONTROLLER][NETWORK] Appel file répartie\n")
 		returnMsg = c.handleDistributedFile(pMsg)
 
 	// snapshot
 	case snapshot.MARKER, snapshot.PREPOST_COLLECT, snapshot.STATE_COLLECT, snapshot.RESET_SNAPSHOT:
-		log.Printf("[CONTROLLER] Appel snapshot\n")
+		log.Printf("[CONTROLLER][NETWORK] Appel snapshot\n")
 		returnMsg = c.handleSnapshot(pMsg)
 
 	// logique du torrent
-	// TODO: remplacer par les constantes des actions Torrent et logique de gestion
-	case "GET_PART", "SEND_PART":
-		log.Printf("[CONTROLLER] Appel logique torrent\n")
+	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.AskingForContent), string(torrentlogic.AskingForShasum):
+		log.Printf("[CONTROLLER][NETWORK] Appel logique torrent\n")
 		c.handleTorrent(pMsg)
 
 	default:
-		log.Printf("[CONTROLLER] Action inconnue, ignorée: %s\n", pMsg.Action)
+		log.Printf("[CONTROLLER][NETWORK] Action inconnue, ignorée: %s\n", pMsg.Action)
 		return responses
 	}
 
 	// ---------- Encodage reponse ----------------
+	if returnMsg.Action == "" {
+		return responses
+	}
 	pString, err := parser.Encode(returnMsg)
 	if err != nil {
-		log.Printf("[CONTROLLER] Pas d'actions -> Pas de message à envoyer")
+		log.Printf("[CONTROLLER][NETWORK] Erreur encodage pour réseau: %v\n", err)
 		return responses
 	}
 
 	return append(responses, pString)
 }
 
-// TODO: HandleIncomingFromLocal gère les demande venant de l'app Torrent
 func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	var responses []string
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
-		log.Printf("[LOCAL] Erreur décodage commande locale: %v\n", err)
+		log.Printf("[CONTROLLER][LOCAL] Erreur décodage commande locale: %v\n", err)
 		return nil
 	}
 
+	c.Lamport.Tick()
+	c.Vector.Tick()
+
+	// ============ LOGIQUE SNAPSHOT ======================
 	//Maj du bilan
 	if isApplicationMessage(pMsg.Action) {
 		c.Snapshot.Bilan++
+		log.Printf("[SNAPSHOT][LOCAL] Création d'un message applicatif | Bilan: %d\n", c.Snapshot.Bilan)
 	}
-
 	// Maj couleur
 	pMsg.Color = string(c.Snapshot.MyColor)
 
-	pMsg.Sender = c.SiteID
-	encodedMsg, err := parser.Encode(pMsg)
+	// ========== REDIRECTION HANDLERS ===================
+	var returnMsg parser.Message
+	switch pMsg.Action {
+	case string(distributed_file.LOCAL_SC_REQUEST), string(distributed_file.LOCAL_SC_LIBERATION):
+		log.Printf("[CONTROLLER][LOCAL] Appel file répartie\n")
+		returnMsg = c.handleDistributedFile(pMsg)
+	case snapshot.MARKER:
+		log.Printf("[CONTROLLER][LOCAL] Appel snapshot\n")
+		returnMsg = c.handleSnapshot(pMsg)
+	case string(torrentlogic.AskingFromSC), string(torrentlogic.DoneWithSC), string(torrentlogic.StartTransfers):
+		log.Printf("[CONTROLLER][LOCAL] Appel logique torrent\n")
+		returnMsg = c.handleTorrent(pMsg)
+	default:
+		if isApplicationMessage(pMsg.Action) {
+			// Message destiné à l'extérieur
+			returnMsg = pMsg
+		} else {
+			log.Printf("[CONTROLLER][LOCAL] Action inconnue, ignorée: %s\n", pMsg.Action)
+			return nil
+		}
+	}
+
+	if len(returnMsg.Vect) == 0 {
+		returnMsg.Vect = make([]int, len(c.NetworkDirectory.IndexToID))
+	}
+
+	if returnMsg.Action == "" {
+		return responses
+	}
+	encodedMsg, err := parser.Encode(returnMsg)
 	if err != nil {
-		log.Printf("[LOCAL] Erreur encodage pour réseau: %v\n", err)
+		log.Printf("[CONTROLLER][LOCAL] Erreur encodage pour réseau: %v\n", err)
 		return nil
 	}
 
@@ -216,6 +284,9 @@ func (c *Controller) getSiteIndexFromID(id string) int {
 
 // getIdFromSIteIndex fais la correspondance entre nom de site et index
 func (c *Controller) getIdFromSIteIndex(index int) string {
+	if index == -1 { // Index de broadcast
+		return BROADCAST
+	}
 	return c.NetworkDirectory.IndexToID[index]
 }
 

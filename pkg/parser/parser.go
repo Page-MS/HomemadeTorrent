@@ -1,7 +1,11 @@
 package parser
 
 import (
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -16,8 +20,6 @@ type Message = struct {
 	Vect        []int
 	Dest        string
 	Sender      string
-	Object      string
-	Chunk       int
 	Payload_len int
 	Payload     string
 	// pour snapshot
@@ -70,10 +72,6 @@ func Decode(raw_data string) (Message, error) {
 			{
 				msg.Id = value
 			}
-		case "OBJECT":
-			{
-				msg.Object = value
-			}
 
 		case "DEST":
 			{
@@ -83,15 +81,6 @@ func Decode(raw_data string) (Message, error) {
 		case "SENDER":
 			{
 				msg.Sender = value
-			}
-
-		case "CHUNK":
-			{
-				val, err := strconv.Atoi(value)
-				if err != nil {
-					return Message{}, errors.New("Impossible to convert CHUNK nb")
-				}
-				msg.Chunk = val
 			}
 
 		case "STAMP":
@@ -182,12 +171,12 @@ func Encode(msg Message) (string, error) {
 	}
 	data = append(data, "VECT:"+strings.Join(str, ","))
 
-	if msg.Object != "" {
-		data = append(data, "OBJECT:"+msg.Object)
+	if msg.Color != "" {
+		data = append(data, "COLOR:"+msg.Color)
 	}
 
-	if msg.Chunk != -1 {
-		data = append(data, "CHUNK:"+strconv.Itoa(msg.Chunk))
+	if msg.Bilan != 0 || msg.Action == "STATE_COLLECT" {
+		data = append(data, "BILAN:"+strconv.Itoa(msg.Bilan))
 	}
 
 	payload_len := len(msg.Payload)
@@ -196,12 +185,62 @@ func Encode(msg Message) (string, error) {
 		data = append(data, msg.Payload)
 	}
 
-	if msg.Color != "" {
-		data = append(data, "COLOR:"+msg.Color)
-	}
-
-	if msg.Bilan != 0 || msg.Action == "STATE_COLLECT" {
-		data = append(data, "BILAN:"+strconv.Itoa(msg.Bilan))
-	}
 	return strings.Join(data, "\n") + "\n", nil
+}
+
+func DecodeTorrentPayload(raw_payload string) (torrentlogic.Message, error) {
+	msg := torrentlogic.Message{}
+	if err := json.Unmarshal([]byte(raw_payload), &msg); err != nil {
+		return torrentlogic.Message{}, fmt.Errorf("failed to unmarshal torrent payload JSON: %w", err)
+	}
+	if msg.Content != "" {
+		decoded, err := base64.StdEncoding.DecodeString(msg.Content)
+		if err != nil {
+			return torrentlogic.Message{}, fmt.Errorf("failed to decode torrent content base64: %w", err)
+		}
+		msg.Content = string(decoded)
+	}
+	return msg, nil
+}
+
+func EncodeTorrentPayload(msg torrentlogic.Message) (string, error) {
+	if msg.MessageType == "" {
+		return "", errors.New("Empty MessageType")
+	}
+	encoded := msg
+	if encoded.Content != "" {
+		encoded.Content = base64.StdEncoding.EncodeToString([]byte(encoded.Content))
+	}
+	payloadBytes, err := json.Marshal(encoded)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal torrent payload JSON: %w", err)
+	}
+	return string(payloadBytes), nil
+}
+
+func DecodeStartTransferPayload(raw_payload string) (torrentlogic.Message, error) {
+	msg := torrentlogic.Message{}
+	lines := strings.Split(raw_payload, "/n")
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		parts := strings.SplitN(l, ";", 2)
+		if len(parts) != 2 {
+			return torrentlogic.Message{}, fmt.Errorf("payload StartTransfers ligne invalide: %s", l)
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		switch key {
+		case "FileID":
+			msg.FileID = value
+		default:
+			// Ignore unknown StartTransfers fields
+		}
+	}
+	if msg.FileID == "" {
+		return torrentlogic.Message{}, errors.New("payload StartTransfers sans FileID")
+	}
+	msg.MessageType = torrentlogic.StartTransfers
+	return msg, nil
 }
