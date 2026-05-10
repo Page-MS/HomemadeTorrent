@@ -471,3 +471,42 @@ func SendRegisterUpdateToPeer(senderID, transferID, targetID, fileID string, par
 	SendMessageToPeer(RegisterUpdate, false, senderID, transferID, targetID, None, fileID, partID, string(payloadBytes), outputMessagesChannel)
 	return nil
 }
+
+// Handling a register update message received from a peer, we update our register accordingly
+func HandleRegisterUpdateMessage(msg Message, reg *registre.Registre) error {
+	var payload RegisterUpdatePayload
+	err := json.Unmarshal([]byte(msg.Content), &payload)
+	if err != nil {
+		return fmt.Errorf("could not unmarshal register update payload: %v", err)
+	}
+	if payload.HasPart && payload.PartID != 0 {
+		err = reg.AddPeerHavingPart(payload.SiteID, payload.FileID, payload.PartID)
+		if err != nil {
+			return fmt.Errorf("could not update register to add peer having part: %v", err)
+		}
+		log.Printf("\n[TORRENT] Updated register to add peer %s having part %d of file %s", payload.SiteID, payload.PartID, payload.FileID)
+	} else {
+		err = reg.RemovePeerHavingPart(payload.SiteID, payload.FileID, payload.PartID)
+		if err != nil {
+			return fmt.Errorf("could not update register to remove peer having part: %v", err)
+		}
+		log.Printf("\n[TORRENT] Updated register to remove peer %s having part %d of file %s", payload.SiteID, payload.PartID, payload.FileID)
+	}
+	// If the partID is 0, it means it's an update for the whole file, we update the register accordingly
+	if payload.PartID == 0 {
+		if payload.HasPart {
+			err = reg.AddPeerHavingFile(payload.FileID, payload.SiteID)
+			if err != nil {
+				return fmt.Errorf("could not update register to add peer having file: %v", err)
+			}
+			log.Printf("\n[TORRENT] Updated register to add peer %s having file %s", payload.SiteID, payload.FileID)
+		} else {
+			err = reg.RemovePeerHavingFile(payload.FileID, payload.SiteID)
+			if err != nil {
+				return fmt.Errorf("could not update register to remove peer having file: %v", err)
+			}
+			log.Printf("\n[TORRENT] Updated register to remove peer %s having file %s", payload.SiteID, payload.FileID)
+		}
+	}
+	return nil
+}

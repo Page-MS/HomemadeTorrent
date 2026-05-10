@@ -567,6 +567,18 @@ func (r *Registre) AddPeerHavingFile(peerID string, fileID string) error {
 	return nil
 }
 
+func (r *Registre) RemovePeerHavingFile(peerID string, fileID string) error {
+	file := r.GetFileByID(fileID)
+	if file == nil {
+		fmt.Printf("File with ID %s not found in register\n", fileID)
+		return fmt.Errorf("file with ID %s not found in register", fileID)
+	}
+	if slices.Contains(file.PeersThatHaveFileID, peerID) {
+		file.PeersThatHaveFileID = slices.Delete(file.PeersThatHaveFileID, slices.Index(file.PeersThatHaveFileID, peerID), slices.Index(file.PeersThatHaveFileID, peerID)+1)
+	}
+	return nil
+}
+
 // Func for updating the register
 func (r *Registre) AddPeerHavingPart(peerID string, fileID string, partID uint) error {
 	part := r.GetFilePart(fileID, partID)
