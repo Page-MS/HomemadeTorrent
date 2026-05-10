@@ -541,8 +541,8 @@ func (r *Registre) AddPeerHavingPart(peerID string, fileID string, partID uint) 
 		return fmt.Errorf("file part with ID %d not found in file with ID %s", partID, fileID)
 	}
 	// If the peer doesn't already have the file part, we add it
-	if !slices.Contains(part.peersThatHaveFilePartID, peerID) {
-		part.peersThatHaveFilePartID = append(part.peersThatHaveFilePartID, peerID)
+	if !slices.Contains(part.PeersThatHaveFilePartID, peerID) {
+		part.PeersThatHaveFilePartID = append(part.PeersThatHaveFilePartID, peerID)
 	}
 	return nil
 }
@@ -553,8 +553,8 @@ func (r *Registre) RemovePeerHavingPart(peerID string, fileID string, partID uin
 		fmt.Printf("File part with ID %d not found in file with ID %s\n", partID, fileID)
 		return fmt.Errorf("file part with ID %d not found in file with ID %s", partID, fileID)
 	}
-	if slices.Contains(part.peersThatHaveFilePartID, peerID) {
-		part.peersThatHaveFilePartID = slices.Delete(part.peersThatHaveFilePartID, slices.Index(part.peersThatHaveFilePartID, peerID), slices.Index(part.peersThatHaveFilePartID, peerID)+1)
+	if slices.Contains(part.PeersThatHaveFilePartID, peerID) {
+		part.PeersThatHaveFilePartID = slices.Delete(part.PeersThatHaveFilePartID, slices.Index(part.PeersThatHaveFilePartID, peerID), slices.Index(part.PeersThatHaveFilePartID, peerID)+1)
 	}
 	return nil
 }
@@ -568,7 +568,10 @@ func (r *Registre) AddPeerHavingFile(peerID string, fileID string) error {
 	// If the peer doesn't already have the file, we add it
 	if !slices.Contains(file.PeersThatHaveFileID, peerID) {
 		file.PeersThatHaveFileID = append(file.PeersThatHaveFileID, peerID)
-// ToJSON transforme le registre en string (pour le Payload du message)
+		// ToJSON transforme le registre en string (pour le Payload du message)
+	}
+	return nil
+}
 func (r *Registre) ToJSON() (string, error) {
 	bytes, err := json.Marshal(r)
 	if err != nil {

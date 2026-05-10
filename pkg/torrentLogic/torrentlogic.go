@@ -27,11 +27,13 @@ const BIN_PATH = registre.BIN_PATH_FROM_MAIN
 
 const (
 	AskingFromSC           MessageType = "AskingFromSC"
+	InitiateSC             MessageType = "InitiateSC"
 	DoneWithSC             MessageType = "DoneWithSC"
 	TransferRelatedMessage MessageType = "TransferRelatedMessage"
 	StartTransfers         MessageType = "StartTransfers"
 	AskingForShasum        MessageType = "AskingForShasum"
 	AskingForContent       MessageType = "AskingForContent"
+	RegisterModification   MessageType = "RegisterModification"
 )
 
 // Possible types of messages that can be received that the controller should just pass to the transfer without looking into it
@@ -103,7 +105,7 @@ type Message struct {
 	FileID               string
 	PartID               uint
 	Content              string
-	register             registre.Registre
+	Register             registre.Registre
 }
 
 // Main function to start a transfer
@@ -197,7 +199,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		select {
 		case messageReceived := <-incomingMessagesChannel:
 			// If we are allowed to have the critical section
-			if messageReceived.messageType == InitiateSC {
+			if messageReceived.MessageType == InitiateSC {
 				// We add ourself as owner of the file part in our own local register
 				reg.AddPeerHavingFile(currentSite, fileID)
 				SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "", None, fileID, 0, "", outputMessagesChannel, *reg)
@@ -291,7 +293,7 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 		select {
 		case messageReceived := <-incomingMessagesChannel:
 			// If we are allowed to have the critical section
-			if messageReceived.messageType == InitiateSC {
+			if messageReceived.MessageType == InitiateSC {
 				// We send a broadcast message of modification
 				SendMessageToPeer(RegisterModification, false, currentSite, transferID, "", None, fileID, partID, "", outputMessagesChannel, *reg)
 			}
@@ -304,7 +306,7 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 		return err
 	}
 	message := <-incomingMessagesChannel
-	if message.messageType != InitiateSC {
+	if message.MessageType != InitiateSC {
 		fmt.Printf("\nUnexpected message received while waiting for critical section: %+v", message)
 		return fmt.Errorf("unexpected message received while waiting for critical section: %+v", message)
 	}
@@ -324,7 +326,7 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 func AskPeerForPart(transferID string, peerID string, fileID string, partID uint, currentSite string, reg *registre.Registre, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, err error) {
 	log.Print("\n[TORRENT] Asking peer ", peerID, " for part ", partID, " of file ", fileID)
 	// Send message asking for shasum
-	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
+	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel, *reg)
 	// Wait for response (shasum) or timeout
 	select {
 	case msg := <-incomingMessagesChannel:
@@ -342,7 +344,7 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 		return false, nil
 	}
 	// Send message asking for content
-	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
+	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel, *reg)
 	// We wait until we receive the content of the file (hopefully...)
 	select {
 	case msg := <-incomingMessagesChannel:
@@ -394,16 +396,16 @@ func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID st
 // Util function to send a message
 func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, transferID string, targetID string, transferRelatedEvent TransferRelatedEvent, fileID string, partID uint, content string, outputMessagesChannel chan<- Message, reg registre.Registre) {
 	message := Message{
-		messageType:          messageType,
-		deleteMe:             deleteMe,
-		senderID:             senderID,
-		transferID:           transferID,
-		targetID:             targetID,
-		transferRelatedEvent: transferRelatedEvent,
-		fileID:               fileID,
-		partID:               partID,
-		content:              content,
-		register:             reg,
+		MessageType:          messageType,
+		DeleteMe:             deleteMe,
+		SenderID:             senderID,
+		TransferID:           transferID,
+		TargetID:             targetID,
+		TransferRelatedEvent: transferRelatedEvent,
+		FileID:               fileID,
+		PartID:               partID,
+		Content:              content,
+		Register:             reg,
 	}
 	log.Printf("\n[TORRENT] Message details:\n Type: %s\n Sender: %s\n Target: %s\n TransferID: %s\n FileID: %s\n PartID: %d\n Content: %s\n", messageName[message.MessageType], message.SenderID, message.TargetID, message.TransferID, message.FileID, message.PartID, message.Content)
 	outputMessagesChannel <- message

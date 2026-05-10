@@ -178,13 +178,6 @@ func Encode(msg Message) (string, error) {
 	if msg.Bilan != 0 || msg.Action == "STATE_COLLECT" {
 		data = append(data, "BILAN:"+strconv.Itoa(msg.Bilan))
 	}
-
-	payload_len := len(msg.Payload)
-	if payload_len > 0 {
-		data = append(data, "PAYLOAD_LEN:"+strconv.Itoa(payload_len))
-		data = append(data, msg.Payload)
-	}
-
 	return strings.Join(data, "\n") + "\n", nil
 }
 
