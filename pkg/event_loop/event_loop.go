@@ -51,21 +51,9 @@ func Start(allSiteIDs []string, siteID string) {
 	controler := control.NewController(siteID, allSiteIDs, &register)
 
 	go listenStdEntry(eventQueue)
-	go listenUserInput(eventQueue, siteID)
+	go listenUserUIInput(eventQueue, siteID, controler, &register)
 	go listenLocalTorrentOutput(eventQueue, controler)
 	go siteLogic(processingChan, eventQueue, controler)
-
-	// interface web
-	go func() {
-		onMsg := func(msg string) {
-			eventQueue <- Event{
-				Type:   ReadMessage,
-				Source: FromLocalUser,
-				Data:   msg,
-			}
-		}
-		webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register)
-	}()
 
 	log.Printf("[EVENT_LOOP] START\n")
 
@@ -118,43 +106,16 @@ func listenStdEntry(queue chan<- Event) {
 	}
 }
 
-func listenUserInput(queue chan<- Event, siteID string) {
-	for {
-		// Recuperer le fichier a lire
-		f := userInput.GetInputFile(siteID)
-		defer f.Close()
-
-		scanner := bufio.NewScanner(f)
-		const maxCapacity = 10 * 1024 * 1024 // 10 Mo pour pouvoir envoyer le registre
-		buf := make([]byte, 64*1024)
-		scanner.Buffer(buf, maxCapacity)
-		var buffer strings.Builder
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.TrimSpace(line) == "" {
-				// Si on a déjà accumulé des données, on traite le message
-				if buffer.Len() > 0 {
-					msg := buffer.String()
-					buffer.Reset()
-
-					log.Printf("[EVENT_LOOP] Message utilisateur lu en entrée: %s\n", msg)
-
-					queue <- Event{
-						Type:   ReadMessage,
-						Source: FromLocalUser,
-						Data:   msg,
-					}
-				}
-				continue
-			}
-			// On rajoute un \n manuellement pour reconstruire le message proprement
-			buffer.WriteString(line + "\n")
-		}
-
-		if err := scanner.Err(); err != nil {
-			log.Println("[EVENT_LOOP] Erreur de lecture User Input:", err)
+// interface web
+func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Controller, register *registre.Registre) {
+	onMsg := func(msg string) {
+		queue <- Event{
+			Type:   ReadMessage,
+			Source: FromLocalUser,
+			Data:   msg,
 		}
 	}
+	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register)
 }
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
