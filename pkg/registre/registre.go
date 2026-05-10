@@ -531,26 +531,40 @@ func CleanUpPartsDirectory() {
 	}
 }
 
-func ConvertRegisterToString(registre *Registre) string {
-	var sb strings.Builder
-	for _, file := range registre.files {
-		sb.WriteString(fmt.Sprintf("File name: %s, File ID: %s, File size: %d, Number of parts: %d\n ", file.Name, file.ID, file.size, file.NumberOfParts))
-		for _, peer := range file.PeersThatHaveFileID {
-			sb.WriteString(fmt.Sprintf("\tPeer that has the file: %s\n", peer))
-		}
-		for _, part := range file.FileParts {
-			sb.WriteString(fmt.Sprintf("\tPart ID: %d, Part size: %d, Part shasum: %s\n", part.filePartID, part.filePartSize, part.filePartShasum))
-			for _, peer := range part.peersThatHaveFilePartID {
-				sb.WriteString(fmt.Sprintf("\tPeer that has the file part: %s\n", peer))
-			}
-		}
+func (r *Registre) AddPeerHavingPart(peerID string, fileID string, partID uint) error {
+	part := r.GetFilePart(fileID, partID)
+	if part == nil {
+		fmt.Printf("File part with ID %d not found in file with ID %s\n", partID, fileID)
+		return fmt.Errorf("file part with ID %d not found in file with ID %s", partID, fileID)
 	}
-	return sb.String()
+	// If the peer doesn't already have the file part, we add it
+	if !slices.Contains(part.peersThatHaveFilePartID, peerID) {
+		part.peersThatHaveFilePartID = append(part.peersThatHaveFilePartID, peerID)
+	}
+	return nil
 }
 
-func convertStringToRegister(stringFormatedRegister string) *Registre {
-	registre := NewRegistre()
+func (r *Registre) RemovePeerHavingPart(peerID string, fileID string, partID uint) error {
+	part := r.GetFilePart(fileID, partID)
+	if part == nil {
+		fmt.Printf("File part with ID %d not found in file with ID %s\n", partID, fileID)
+		return fmt.Errorf("file part with ID %d not found in file with ID %s", partID, fileID)
+	}
+	if slices.Contains(part.peersThatHaveFilePartID, peerID) {
+		part.peersThatHaveFilePartID = slices.Delete(part.peersThatHaveFilePartID, slices.Index(part.peersThatHaveFilePartID, peerID), slices.Index(part.peersThatHaveFilePartID, peerID)+1)
+	}
+	return nil
+}
 
-	// TODO
-	return registre
+func (r *Registre) AddPeerHavingFile(peerID string, fileID string) error {
+	file := r.GetFileByID(fileID)
+	if file == nil {
+		fmt.Printf("File with ID %s not found in register\n", fileID)
+		return fmt.Errorf("file with ID %s not found in register", fileID)
+	}
+	// If the peer doesn't already have the file, we add it
+	if !slices.Contains(file.PeersThatHaveFileID, peerID) {
+		file.PeersThatHaveFileID = append(file.PeersThatHaveFileID, peerID)
+	}
+	return nil
 }

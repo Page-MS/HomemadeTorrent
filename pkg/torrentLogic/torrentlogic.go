@@ -20,6 +20,7 @@ type TransferRelatedEvent int
 // 2. On reçoit AskingForContent (vas être supprimée après réponse)
 
 const CONNEXION_TIMEOUT = 10 * time.Second
+const SC_TIMEOUT = 10 * CONNEXION_TIMEOUT
 const (
 	AskingFromSC MessageType = iota
 	InitiateSC
@@ -97,8 +98,9 @@ type Message struct {
 	targetID             string // "" is a broadcast (can be changed if you have another convention)
 	transferRelatedEvent TransferRelatedEvent
 	fileID               string
-	partID               uint
+	partID               uint // 0 for full file related messages
 	content              string
+	register             registre.Registre
 }
 
 // Main function to start a transfer
@@ -175,6 +177,26 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		return false, error
 	}
 	fmt.Printf("\nFile %s reassembled successfully !", file.Name)
+	// We ask for a critical section to update the shared register
+	timeout := false
+	go func() {
+		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "", None, fileID, 0, "", outputMessagesChannel, *reg)
+		select {
+		case messageReceived := <-incomingMessagesChannel:
+			// If we are allowed to have the critical section
+			if messageReceived.messageType == InitiateSC {
+				// We add ourself as owner of the file part in our own local register
+				reg.AddPeerHavingFile(currentSite, fileID)
+				SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "", None, fileID, 0, "", outputMessagesChannel, *reg)
+			}
+		case <-time.After(SC_TIMEOUT):
+			timeout = true
+		}
+	}()
+	if timeout == true {
+		fmt.Print("\n SC obtention failed")
+		return false, fmt.Errorf("could not obtain critical section to update register after transfer completion for file %s", file.Name)
+	}
 	return true, nil
 }
 
@@ -252,15 +274,15 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 	// We ask for a critical section to update the shared register
 	timeout := false
 	go func() {
-		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "", None, fileID, partID, "", outputMessagesChannel)
+		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "", None, fileID, partID, "", outputMessagesChannel, *reg)
 		select {
 		case messageReceived := <-incomingMessagesChannel:
 			// If we are allowed to have the critical section
 			if messageReceived.messageType == InitiateSC {
 				// We send a broadcast message of modification
-				SendMessageToPeer(RegisterModification, false, currentSite, transferID, "", None, fileID, partID, registre.ConvertRegisterToString(reg), outputMessagesChannel)
+				SendMessageToPeer(RegisterModification, false, currentSite, transferID, "", None, fileID, partID, "", outputMessagesChannel, *reg)
 			}
-		case <-time.After(CONNEXION_TIMEOUT * 10):
+		case <-time.After(SC_TIMEOUT):
 			timeout = true
 		}
 	}()
@@ -268,8 +290,14 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 		fmt.Print("\n SC obtention failed")
 		return err
 	}
+	message := <-incomingMessagesChannel
+	if message.messageType != InitiateSC {
+		fmt.Printf("\nUnexpected message received while waiting for critical section: %+v", message)
+		return fmt.Errorf("unexpected message received while waiting for critical section: %+v", message)
+	}
 	// We add ourself as owner of the file part in our own local register
-	SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "", None, fileID, partID, "", outputMessagesChannel)
+	reg.AddPeerHavingPart(currentSite, fileID, partID)
+	SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "", None, fileID, partID, "", outputMessagesChannel, *reg)
 	partTransferWg.Done()
 
 	channelFin <- partID
@@ -283,7 +311,7 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 func AskPeerForPart(transferID string, peerID string, fileID string, partID uint, currentSite string, reg *registre.Registre, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, err error) {
 	fmt.Print("\nAsking peer ", peerID, " for part ", partID, " of file ", fileID)
 	// Send message asking for shasum
-	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, 1, fileID, partID, "", outputMessagesChannel)
+	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, 1, fileID, partID, "", outputMessagesChannel, *reg)
 	// Wait for response or timeout
 	timeout := false
 	go func() {
@@ -304,7 +332,7 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 		return false, err
 	}
 	// Send message asking for content
-	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, 1, fileID, partID, "", outputMessagesChannel)
+	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, 1, fileID, partID, "", outputMessagesChannel, *reg)
 	// Wait for content
 	go func() {
 		time.Sleep(CONNEXION_TIMEOUT)
@@ -338,13 +366,13 @@ func HandlePeerAskingIfWeHavePart(currentSiteID string, peerID string, fileID st
 	}
 	// We check for the shasum
 	shasum := registre.CalculateShasum(filePath)
-	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, "", peerID, ReceivingShasum, fileID, partID, shasum, outputMessagesChannel)
+	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, "", peerID, ReceivingShasum, fileID, partID, shasum, outputMessagesChannel, *reg)
 
 	return nil
 }
 
 // Util function to send a message
-func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, transferID string, targetID string, transferRelatedEvent TransferRelatedEvent, fileID string, partID uint, content string, outputMessagesChannel chan<- Message) {
+func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, transferID string, targetID string, transferRelatedEvent TransferRelatedEvent, fileID string, partID uint, content string, outputMessagesChannel chan<- Message, reg registre.Registre) {
 	message := Message{
 		messageType:          messageType,
 		deleteMe:             deleteMe,
@@ -355,6 +383,7 @@ func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, 
 		fileID:               fileID,
 		partID:               partID,
 		content:              content,
+		register:             reg,
 	}
 	fmt.Printf("\nMessage details:\n Type: %s\n Sender: %s\n Target: %s\n Content: %s", messageName[message.messageType], message.senderID, message.targetID, message.content)
 	outputMessagesChannel <- message
@@ -384,7 +413,7 @@ func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID 
 	filePartContent := make([]byte, fileSize)
 	file.Read(filePartContent)
 	// We send the content of the part to the peer
-	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, "", peerID, ReceivingContent, fileID, partID, string(filePartContent), outputMessagesChannel)
+	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, "", peerID, ReceivingContent, fileID, partID, string(filePartContent), outputMessagesChannel, *reg)
 
 	return nil
 }
