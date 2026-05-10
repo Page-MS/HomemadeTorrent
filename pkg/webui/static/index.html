@@ -24,7 +24,11 @@
             <div class="flex-1 min-w-[300px] border border-stone-300 p-4 bg-stone-100">
                 <h2 class="w-full text-lg mt-0 border-b border-dashed border-stone-300 pb-1 mb-3">
                     Register Information
-                    <span class="ml-auto text-xs text-stone-700">(auto refresh)</span>
+                    <template x-if="isLoading">
+                        <span class="text-stone-800 animate-pulse">
+                            loading...
+                        </span>
+                    </template>
                 </h2>
                 <div id="register-info" class="max-h-96 overflow-auto">
                     <template x-if="files.length === 0">
@@ -60,6 +64,10 @@
                         </template>
                     </ul>
                 </div>
+                <button @click="refreshFiles()"
+                    class="mt-2 bg-stone-200 border border-stone-500 py-0.5 px-1 text-stone-800 hover:bg-stone-300 transition-colors">
+                    Refresh register
+                </button>
             </div>
 
             <!-- Send Message Panel -->
@@ -127,6 +135,7 @@
                 statusMessage: '',
                 statusIsError: false,
                 isSending: false,
+                isLoading: false,
                 logs: [],
                 logCounter: 0,
                 updateInterval: null,
@@ -138,6 +147,7 @@
                 },
 
                 async refreshFiles() {
+                    this.isLoading = true;
                     try {
                         const response = await fetch('/api/info');
                         if (!response.ok) throw new Error('Failed to fetch');
@@ -147,6 +157,7 @@
                         console.error('Error refreshing files:', err);
                         this.showStatus('Failed to load files', true);
                     }
+                    this.isLoading = false;
                 },
 
                 hasLocalFile(file) {
