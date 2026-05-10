@@ -16,7 +16,7 @@ import (
 )
 
 // triggerLocalSnapshot effectue l'action de "clic"
-func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID int) string {
+func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID string) string {
 	// passage au rouge
 	c.Snapshot.MyColor = snapshot.Red
 	c.Snapshot.IsInitiator = isInitiator
@@ -45,7 +45,7 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID int) str
 
 	// Si on est l'initiateur, on initialise le comptage
 	if isInitiator {
-		c.Snapshot.Bilan++ //TODO : Debug (a enlever)
+		//c.Snapshot.Bilan++ //TODO : Debug prépost (a enlever)
 		c.Snapshot.NbEtatsAttendus = len(c.NetworkDirectory.IndexToID) - 1
 		c.Snapshot.NbMsgAttendus = c.Snapshot.Bilan
 		c.Snapshot.CollectedStates = []snapshot.SiteState{}
@@ -75,7 +75,7 @@ func (c *Controller) formatPrepostForInitiator(pMsg parser.Message) string {
 		Id:      uuid.New().String(),
 		Action:  snapshot.PREPOST_COLLECT,
 		Sender:  c.SiteID,
-		Dest:    c.getIdFromSIteIndex(c.Snapshot.InitiatorID),
+		Dest:    c.Snapshot.InitiatorID,
 		Payload: string(jsonMsg),      // message d'origine
 		Color:   string(snapshot.Red), // message de controles sont rouges
 		Stamp:   c.Lamport.GetValue(),
@@ -103,7 +103,7 @@ func (c *Controller) sendStateOnRing() string {
 		Sender:  c.SiteID,
 		Stamp:   c.Lamport.GetValue(),
 		Vect:    c.Vector.GetCopy(),
-		Dest:    c.getIdFromSIteIndex(c.Snapshot.InitiatorID),
+		Dest:    c.Snapshot.InitiatorID,
 		Bilan:   c.Snapshot.Bilan, // transmet notre bilan à l'initiateur
 		Color:   string(snapshot.Red),
 		Payload: jsonReg,

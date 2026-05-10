@@ -5,11 +5,17 @@ LOG_DIR="$(pwd)/logs"
 FIFO="/tmp/backpipe"
 PROJECT_DIR="../src/homemadeTorrent"
 
+
 N=3
 rm -f "$FIFO"
 mkfifo "$FIFO"
-
 mkdir -p $LOG_DIR
+
+# Supprimer les données des sites des précédentes executions
+TARGET="../bin"
+KEEP="baseFiles"
+
+find "$TARGET" -mindepth 1 -path "$TARGET/$KEEP" -o -path "$TARGET/$KEEP/*" -prune -o -exec rm -rf {} +
 
 # Construction de la liste des membres
 IDS=""

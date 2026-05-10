@@ -40,7 +40,7 @@ var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
 	torrentlogic.TransferRelatedMessage: {},
 	torrentlogic.AskingForShasum:        {},
 	torrentlogic.AskingForContent:       {},
-	"TEST":                              {},
+	//"TEST":                              {}, // TODO: debug prepost
 }
 
 // NewController initialise un nouveau dispatcher central
@@ -139,14 +139,26 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// Si on reçoit rouge alors qu'on est blanc on peut notre instantané avant de traiter le message.
-	if pMsg.Color == string(snapshot.Red) && c.Snapshot.MyColor == snapshot.White {
+	if pMsg.Color == string(snapshot.Red) && c.Snapshot.MyColor == snapshot.White && pMsg.Action == snapshot.MARKER {
 		log.Printf("[SNAPSHOT] Lestage détecté (Msg ROUGE sur Site BLANC). Clic forcé.")
 		initiatorID := pMsg.Sender
 
-		msgSnapshot := c.triggerLocalSnapshot(false, c.getSiteIndexFromID(initiatorID))
+		msgSnapshot := c.triggerLocalSnapshot(false, initiatorID)
 		if msgSnapshot != "" {
 			responses = append(responses, msgSnapshot)
 		}
+
+		// Lance le script avec un argument //TODO : Debug prépost (a enlever)
+		/*
+			if c.SiteID == "1" {
+				log.Printf("[TEST] Fake recepetion enclenchée\n")
+				cmd := exec.Command("../../simulations/msg.sh")
+				_, err := cmd.CombinedOutput()
+				if err != nil {
+					log.Println("Erreur :", err)
+				}
+			}
+		*/
 	}
 
 	// Détection des messages Prépost : Envoyé blanc, reçu rouge

@@ -171,12 +171,6 @@ func Encode(msg Message) (string, error) {
 	}
 	data = append(data, "VECT:"+strings.Join(str, ","))
 
-	payload_len := len(msg.Payload)
-	if payload_len > 0 {
-		data = append(data, "PAYLOAD_LEN:"+strconv.Itoa(payload_len))
-		data = append(data, msg.Payload)
-	}
-
 	if msg.Color != "" {
 		data = append(data, "COLOR:"+msg.Color)
 	}
@@ -184,6 +178,13 @@ func Encode(msg Message) (string, error) {
 	if msg.Bilan != 0 || msg.Action == "STATE_COLLECT" {
 		data = append(data, "BILAN:"+strconv.Itoa(msg.Bilan))
 	}
+
+	payload_len := len(msg.Payload)
+	if payload_len > 0 {
+		data = append(data, "PAYLOAD_LEN:"+strconv.Itoa(payload_len))
+		data = append(data, msg.Payload)
+	}
+
 	return strings.Join(data, "\n") + "\n", nil
 }
 

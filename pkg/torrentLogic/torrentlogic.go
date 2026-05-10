@@ -135,7 +135,6 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	var wg sync.WaitGroup
 	// We make a tab of channels to transmit the messages to the goroutines
 	partIncomingChannels := make([]chan Message, file.NumberOfParts+1)
-
 	for i := uint(1); i <= file.NumberOfParts; i++ {
 		transfer.partsToAskIDs[i-1] = i
 		partIncomingChannels[i] = make(chan Message)
@@ -151,6 +150,17 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		}
 	}()
 	PrintTransferStatus(transfer)
+	// TODO: Debug prépost
+	/*
+		if currentSite == "3" {
+			log.Printf("[TEST] snapshot enclenchée\n")
+			cmd := exec.Command("../../pkg/user_input/ui_hooks/startSnapshot.sh", "1")
+			_, err := cmd.CombinedOutput()
+			if err != nil {
+				log.Println("Erreur :", err)
+			}
+		}
+	*/
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		for n := range transfersResultsChannel {

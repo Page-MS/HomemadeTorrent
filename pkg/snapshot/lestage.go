@@ -24,7 +24,7 @@ type SiteState struct {
 type Snapshot struct {
 	MyColor     Color
 	IsInitiator bool
-	InitiatorID int
+	InitiatorID string
 	Bilan       int // émis - reçus (préclic)
 
 	// snapshot

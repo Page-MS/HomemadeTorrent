@@ -5,7 +5,6 @@ import (
 	"HomemadeTorrent/pkg/snapshot"
 	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
-	"os/exec"
 
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
@@ -85,23 +84,12 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 			}
 
 			// Action de Snapshot (Sauvegarde + Envoi de l'état si on n'est pas l'initiateur)
-			c.triggerLocalSnapshot(isGlobalInitiator, c.getSiteIndexFromID(initiatorID))
+			c.triggerLocalSnapshot(isGlobalInitiator, initiatorID)
 
 			// On prépare le Marker pour le voisin suivant
 			pMsg.Sender = initiatorID // On garde l'ID du vrai initiateur
 			pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
 			pMsg.Color = string(snapshot.Red)
-
-			// Lance le script avec un argument //TODO : Debug (a enlever)
-			log.Printf("[TEST] SIte ID: %s\n", c.SiteID)
-			if c.SiteID == "1" {
-				log.Printf("[TEST] Fake recepetion enclenchée\n")
-				cmd := exec.Command("../../simulations/msg.sh")
-				_, err := cmd.CombinedOutput()
-				if err != nil {
-					log.Println("Erreur :", err)
-				}
-			}
 
 			return pMsg // On envoie le Marker au suivant
 		}
@@ -137,7 +125,6 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 		}
 		c.Snapshot.CollectedStates = append(c.Snapshot.CollectedStates, remoteState)
 		log.Printf("[SNAPSHOT] État reçu de %s (Bilan: %d). Attente de %d messages restants.", pMsg.Sender, pMsg.Bilan, c.Snapshot.NbMsgAttendus)
-		log.Printf("[SNAPSHOT] Bilan site actuel: %d\n", c.Snapshot.Bilan)
 
 	case snapshot.PREPOST_COLLECT:
 		if c.Snapshot.NbEtatsAttendus > 0 || c.Snapshot.NbMsgAttendus > 0 {
