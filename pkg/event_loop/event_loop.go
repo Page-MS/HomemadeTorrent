@@ -4,7 +4,6 @@ import (
 	"HomemadeTorrent/pkg/control"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
-	userInput "HomemadeTorrent/pkg/user_input"
 	"HomemadeTorrent/pkg/webui"
 	"bufio"
 	"fmt"
@@ -36,9 +35,6 @@ type Event struct {
 }
 
 func Start(allSiteIDs []string, siteID string) {
-	// Init user fifo entry point
-	userInput.CreateFIFOInput(siteID)
-
 	// Channels
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
