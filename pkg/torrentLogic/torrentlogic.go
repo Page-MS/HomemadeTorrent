@@ -2,6 +2,7 @@ package torrentlogic
 
 import (
 	"HomemadeTorrent/pkg/registre"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -17,16 +18,32 @@ type PartTransferStatus int
 
 type TransferRelatedEvent int
 
+// I considered adding a register field to the messages but this seemed more elegant
+const (
+	RegisterUpdate MessageType = "RegisterUpdate"
+)
+
+type RegisterUpdatePayload struct {
+	FileID  string `json:"file_id"`
+	PartID  uint   `json:"part_id,omitempty"`
+	SiteID  string `json:"site_id"`
+	HasPart bool   `json:"has_part"`
+}
+
 // 1. On reçoit de notre site (UI) une demande de transfert
 // 2. On reçoit AskingForShasum (vas être supprimée après réponse)
 // 2. On reçoit AskingForContent (vas être supprimée après réponse)
 
 const CONNEXION_TIMEOUT = 10 * time.Second
 
+// Longer because we need to wait for obtaining a SC
+const SC_TIMEOUT = 10 * CONNEXION_TIMEOUT
+
 const BIN_PATH = registre.BIN_PATH_FROM_MAIN
 
 const (
 	AskingFromSC           MessageType = "AskingFromSC"
+	StartSC                MessageType = "StartSC"
 	DoneWithSC             MessageType = "DoneWithSC"
 	TransferRelatedMessage MessageType = "TransferRelatedMessage"
 	StartTransfers         MessageType = "StartTransfers"
@@ -56,6 +73,7 @@ const (
 // Messages types
 var messageName = map[MessageType]string{
 	AskingFromSC:           "Asking for a critical section",
+	StartSC:                "Authorised to start the critical section",
 	DoneWithSC:             "Done with critical section",
 	TransferRelatedMessage: "Message related to a transfer", // the controller doesn't have to look into it when sending it
 	AskingForShasum:        "Asking for the shasum of a part",
@@ -134,6 +152,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	// WaitGroup for synchronizing the transfers goroutines
 	var wg sync.WaitGroup
 	// We make a tab of channels to transmit the messages to the goroutines
+	// +1 for handling the file parts starting at one
 	partIncomingChannels := make([]chan Message, file.NumberOfParts+1)
 	for i := uint(1); i <= file.NumberOfParts; i++ {
 		transfer.partsToAskIDs[i-1] = i
@@ -187,6 +206,37 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		return false, error
 	}
 	log.Printf("\n[TORRENT] File %s reassembled successfully !", file.Name)
+
+	// SC handling
+	// We update our register to say we have the file
+	err := reg.AddPeerHavingFile(fileID, currentSite)
+	if err != nil {
+		log.Printf("\n[TORRENT] Error while updating register to say we have the file %s: %v", file.Name, err)
+		return false, err
+	}
+	// We ask for a SC
+	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
+	select {
+	case message := <-incomingMessagesChannel:
+		// If this is the authorziation for a critical section
+		if message.MessageType == StartSC {
+			log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", file.Name)
+			err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, 0, true, outputMessagesChannel)
+			if err != nil {
+				log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", file.Name, err)
+				return false, err
+			}
+			// We send the message announcing we have finished with our critical section
+			SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
+
+		} else {
+			err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
+			return false, err
+		}
+	case <-time.After(SC_TIMEOUT):
+		err = fmt.Errorf("ERROR: Timeout while waiting SC authorization ")
+		return false, err
+	}
 	return true, nil
 }
 
@@ -401,5 +451,23 @@ func HandlePeerRespondingWithShasum(currentSiteID string, peerID string, fileID 
 		return fmt.Errorf("shasum calculated %s does not match shasum received %s for part %d of file %s", shasumFromRegister, shasum, partID, fileID)
 	}
 	log.Printf("\n[TORRENT] Shasum for part %d of file %s is correct", partID, fileID)
+	return nil
+}
+
+// Used when we obtain a critical section to update the register of the others
+func SendRegisterUpdateToPeer(senderID, transferID, targetID, fileID string, partID uint, hasPart bool, outputMessagesChannel chan<- Message) error {
+	// In JSON for easier reconstruction
+	payloadStruct := RegisterUpdatePayload{
+		FileID:  fileID,
+		PartID:  partID,
+		SiteID:  senderID,
+		HasPart: hasPart,
+	}
+	payloadBytes, err := json.Marshal(payloadStruct)
+	if err != nil {
+		return err
+	}
+
+	SendMessageToPeer(RegisterUpdate, false, senderID, transferID, targetID, None, fileID, partID, string(payloadBytes), outputMessagesChannel)
 	return nil
 }
