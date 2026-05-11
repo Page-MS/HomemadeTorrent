@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 type MessageType string
@@ -25,11 +24,6 @@ const (
 // 1. On reçoit de notre site (UI) une demande de transfert
 // 2. On reçoit AskingForShasum (vas être supprimée après réponse)
 // 2. On reçoit AskingForContent (vas être supprimée après réponse)
-
-const CONNEXION_TIMEOUT = 10 * time.Second
-
-// Longer because we need to wait for obtaining a SC
-const SC_TIMEOUT = 10 * CONNEXION_TIMEOUT
 
 const BIN_PATH = registre.BIN_PATH_FROM_MAIN
 
@@ -195,7 +189,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	error = registre.ReassembleFileFromParts(file.Name, BIN_PATH+"/"+currentSite+"/parts", BIN_PATH+"/"+currentSite+"/reassembled", reg)
 	if error != nil {
 		log.Printf("\n[TORRENT] Error while reassembling file %s: %v", file.Name, error)
-		//return false, error
+		return false, error
 	}
 	log.Printf("\n[TORRENT] File %s reassembled successfully !", file.Name)
 
@@ -337,9 +331,6 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 		if err != nil {
 			return false, err
 		}
-	// Timeout
-	case <-time.After(CONNEXION_TIMEOUT):
-		return false, nil
 	}
 	// Send message asking for content
 	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
@@ -364,13 +355,11 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 		}
 		err = os.WriteFile(partFilePath, []byte(content), 0644)
 		if err != nil {
+			log.Printf("\n[TORRENT] Error while writing part: %v", err)
 			return false, err
 		}
-		// WOHOOO
 		log.Printf("\n[TORRENT] Saved part file: %s\n", partFilePath)
 		return true, nil
-	case <-time.After(CONNEXION_TIMEOUT):
-		return false, nil
 	}
 }
 
