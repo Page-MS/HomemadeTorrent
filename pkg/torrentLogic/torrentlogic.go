@@ -209,34 +209,38 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 
 	// SC handling
 	// We update our register to say we have the file
-	err := reg.AddPeerHavingFile(fileID, currentSite)
+	log.Printf("\n[TORRENT] FileID : %s", fileID)
+	err := reg.AddPeerHavingFile(currentSite, fileID)
 	if err != nil {
 		log.Printf("\n[TORRENT] Error while updating register to say we have the file %s: %v", file.Name, err)
 		return false, err
 	}
-	// We ask for a SC
-	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
-	select {
-	case message := <-incomingMessagesChannel:
-		// If this is the authorziation for a critical section
-		if message.MessageType == StartSC {
-			log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", file.Name)
-			err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, 0, true, outputMessagesChannel)
-			if err != nil {
-				log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", file.Name, err)
+	/*
+		// We ask for a SC
+		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
+		select {
+		case message := <-incomingMessagesChannel:
+			// If this is the authorziation for a critical section
+			if message.MessageType == StartSC {
+				log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", file.Name)
+				err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, 0, true, outputMessagesChannel)
+				if err != nil {
+					log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", file.Name, err)
+					return false, err
+				}
+				// We send the message announcing we have finished with our critical section
+				SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
+
+			} else {
+				err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
 				return false, err
 			}
-			// We send the message announcing we have finished with our critical section
-			SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
-
-		} else {
-			err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
+		case <-time.After(SC_TIMEOUT):
+			err = fmt.Errorf("ERROR: Timeout while waiting SC authorization ")
 			return false, err
 		}
-	case <-time.After(SC_TIMEOUT):
-		err = fmt.Errorf("ERROR: Timeout while waiting SC authorization ")
-		return false, err
-	}
+
+	*/
 	return true, nil
 }
 
@@ -317,29 +321,32 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 		log.Printf("\n[TORRENT] Error while updating register to say we have the file part %s: %v", partID, err)
 		return err
 	}
-	// We ask for a SC
-	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "-1", 0, fileID, partID, "", outputMessagesChannel)
-	select {
-	case message := <-incomingMessagesChannel:
-		// If this is the authorziation for a critical section
-		if message.MessageType == StartSC {
-			log.Printf("\n[TORRENT] Received authorization to start critical section for file part %s, updating register of the others", partID)
-			err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, partID, true, outputMessagesChannel)
-			if err != nil {
-				log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", partID, err)
+	/*
+		// We ask for a SC
+		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "-1", 0, fileID, partID, "", outputMessagesChannel)
+		select {
+		case message := <-incomingMessagesChannel:
+			// If this is the authorziation for a critical section
+			if message.MessageType == StartSC {
+				log.Printf("\n[TORRENT] Received authorization to start critical section for file part %s, updating register of the others", partID)
+				err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, partID, true, outputMessagesChannel)
+				if err != nil {
+					log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", partID, err)
+					return err
+				}
+				// We send the message announcing we have finished with our critical section
+				SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, partID, "", outputMessagesChannel)
+
+			} else {
+				err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization  (in StartTransferForPart)")
 				return err
 			}
-			// We send the message announcing we have finished with our critical section
-			SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, partID, "", outputMessagesChannel)
-
-		} else {
-			err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization  (in StartTransferForPart)")
+		case <-time.After(SC_TIMEOUT):
+			err = fmt.Errorf("ERROR: Timeout while waiting SC authorization (in StartTransferForPart)")
 			return err
 		}
-	case <-time.After(SC_TIMEOUT):
-		err = fmt.Errorf("ERROR: Timeout while waiting SC authorization (in StartTransferForPart)")
-		return err
-	}
+	*/
+
 	log.Printf("\n[TORRENT] Transfer for part %d of file %s from peer %s succeeded !", partID, fileID, peerToAsk)
 
 	channelFin <- partID
