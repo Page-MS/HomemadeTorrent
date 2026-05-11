@@ -310,6 +310,36 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 			return err
 		}
 	}
+	// SC handling
+	// We update our register to say we have the file
+	err = registre.AddPeerHavingPart(currentSite, fileID, partID)
+	if err != nil {
+		log.Printf("\n[TORRENT] Error while updating register to say we have the file part %s: %v", partID, err)
+		return err
+	}
+	// We ask for a SC
+	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "-1", 0, fileID, partID, "", outputMessagesChannel)
+	select {
+	case message := <-incomingMessagesChannel:
+		// If this is the authorziation for a critical section
+		if message.MessageType == StartSC {
+			log.Printf("\n[TORRENT] Received authorization to start critical section for file part %s, updating register of the others", partID)
+			err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, partID, true, outputMessagesChannel)
+			if err != nil {
+				log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", partID, err)
+				return err
+			}
+			// We send the message announcing we have finished with our critical section
+			SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, partID, "", outputMessagesChannel)
+
+		} else {
+			err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization  (in StartTransferForPart)")
+			return err
+		}
+	case <-time.After(SC_TIMEOUT):
+		err = fmt.Errorf("ERROR: Timeout while waiting SC authorization (in StartTransferForPart)")
+		return err
+	}
 	log.Printf("\n[TORRENT] Transfer for part %d of file %s from peer %s succeeded !", partID, fileID, peerToAsk)
 
 	channelFin <- partID
