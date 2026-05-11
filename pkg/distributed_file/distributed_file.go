@@ -25,6 +25,7 @@ type DistributedFile struct {
 	EstampClock *clock.LamportClock
 	Tab         []TabEntry
 	SiteIndex   int // Conversion Id site en index dans la logique du controleur
+	TransferID  string
 }
 
 // ------------- Structure Message traité par la file ----------------------
@@ -56,12 +57,14 @@ func GetNewDistributedFile(n int, siteIndex int, estampClock *clock.LamportClock
 }
 
 // Traite une demande de section critique venant de l'app du site
-func (df *DistributedFile) SCRequestFromBaseApp() Message {
+func (df *DistributedFile) SCRequestFromBaseApp(transferID string) Message {
 	df.EstampClock.Tick()
 	df.Tab[df.SiteIndex] = TabEntry{
 		Type: SC_REQUEST,
 		Date: df.EstampClock.GetValue(),
 	}
+
+	df.TransferID = transferID
 
 	return Message{
 		Type:        SC_REQUEST,
@@ -69,6 +72,7 @@ func (df *DistributedFile) SCRequestFromBaseApp() Message {
 		IndexDest:   -1, // Index du broadcast
 		ClockValue:  df.EstampClock.GetValue(),
 	}
+
 }
 
 // Traite une demande de libération de section critique venant de l'app du site

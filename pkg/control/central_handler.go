@@ -35,8 +35,6 @@ type Controller struct {
 const BROADCAST string = "-1"
 
 var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
-	torrentlogic.AskingFromSC:           {},
-	torrentlogic.DoneWithSC:             {},
 	torrentlogic.TransferRelatedMessage: {},
 	torrentlogic.AskingForShasum:        {},
 	torrentlogic.AskingForContent:       {},

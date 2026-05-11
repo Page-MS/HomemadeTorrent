@@ -32,14 +32,21 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 	case distributed_file.ACK:
 		isReady = c.DistFile.AckFromNetwork(msgCtrl)
 	case distributed_file.LOCAL_SC_REQUEST:
-		responseMsg = c.DistFile.SCRequestFromBaseApp()
+		responseMsg = c.DistFile.SCRequestFromBaseApp(pMsg.Dest)
 	case distributed_file.LOCAL_SC_LIBERATION:
 		responseMsg = c.DistFile.SCStopFromBaseApp()
 	}
 
 	if isReady {
 		log.Printf("[CONTROLLER] >>> SECTION CRITIQUE ACCORDÉE SITE %s\n", c.SiteID)
-		// TODO: informer l'app torrent
+		// informer l'app torrent
+		inputChan, exist := c.InputTorrentTransfers[c.DistFile.TransferID]
+		if !exist {
+			log.Printf("[CONTROLER] Impossible de prévenir l'app: Transfers inexistant pour l'ID: %s", c.DistFile.TransferID)
+		}
+		inputChan <- torrentlogic.Message{
+			MessageType: torrentlogic.StartSC,
+		}
 	}
 
 	returnMsg, err := c.FileMessageToParserMessage(responseMsg)

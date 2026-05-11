@@ -215,7 +215,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		return false, err
 	}
 	// We ask for a SC
-	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
+	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
 	select {
 	case message := <-incomingMessagesChannel:
 		// If this is the authorziation for a critical section
