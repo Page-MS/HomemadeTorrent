@@ -29,6 +29,7 @@ type Controller struct {
 	Snapshot              *snapshot.Snapshot
 	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
 	OutputTorrentChan     chan torrentlogic.Message
+	TorrentScChan         chan torrentlogic.Message
 }
 
 // Adapter cette valeur en focntion de la convention choisie
@@ -38,7 +39,6 @@ var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
 	torrentlogic.TransferRelatedMessage: {},
 	torrentlogic.AskingForShasum:        {},
 	torrentlogic.AskingForContent:       {},
-	//"TEST":                              {}, // TODO: debug prepost
 }
 
 // NewController initialise un nouveau dispatcher central
@@ -61,6 +61,7 @@ func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Co
 		},
 		InputTorrentTransfers: make(map[string]chan torrentlogic.Message),
 		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
+		TorrentScChan:         make(chan torrentlogic.Message),
 		Reg:                   r,
 	}
 }
@@ -194,7 +195,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		returnMsg = c.handleSnapshot(pMsg)
 
 	// logique du torrent
-	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.AskingForContent), string(torrentlogic.AskingForShasum):
+	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.AskingForContent), string(torrentlogic.AskingForShasum), string(torrentlogic.RegisterUpdate):
 		log.Printf("[CONTROLLER][NETWORK] Appel logique torrent\n")
 		c.handleTorrent(pMsg)
 
@@ -249,7 +250,7 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 		log.Printf("[CONTROLLER][LOCAL] Appel logique torrent\n")
 		returnMsg = c.handleTorrent(pMsg)
 	default:
-		if isApplicationMessage(pMsg.Action) {
+		if isApplicationMessage(pMsg.Action) || pMsg.Action == string(torrentlogic.RegisterUpdate) {
 			// Message destiné à l'extérieur
 			returnMsg = pMsg
 		} else {

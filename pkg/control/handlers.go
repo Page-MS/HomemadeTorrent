@@ -39,12 +39,7 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 
 	if isReady {
 		log.Printf("[CONTROLLER] >>> SECTION CRITIQUE ACCORDÉE SITE %s\n", c.SiteID)
-		// informer l'app torrent
-		inputChan, exist := c.InputTorrentTransfers[c.DistFile.TransferID]
-		if !exist {
-			log.Printf("[CONTROLER] Impossible de prévenir l'app: Transfers inexistant pour l'ID: %s", c.DistFile.TransferID)
-		}
-		inputChan <- torrentlogic.Message{
+		c.TorrentScChan <- torrentlogic.Message{
 			MessageType: torrentlogic.StartSC,
 		}
 	}
@@ -185,7 +180,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			if !exist {
 				inputChan = make(chan torrentlogic.Message, 100)
 				c.InputTorrentTransfers[msgTorrent.TransferID] = inputChan
-				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Reg, inputChan, c.OutputTorrentChan)
+				go torrentlogic.StartOutgoingTransfer(msgTorrent.TransferID, msgTorrent.FileID, c.SiteID, c.Reg, inputChan, c.OutputTorrentChan, c.TorrentScChan)
 			}
 			inputChan <- msgTorrent
 			return parser.Message{}
@@ -215,6 +210,12 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			c.Reg,
 			c.OutputTorrentChan,
 		)
+
+	case string(torrentlogic.RegisterUpdate):
+		err = torrentlogic.HandleRegisterUpdateMessage(msgTorrent, c.Reg)
+		if err != nil {
+			log.Printf("[CONTROLLER] Update du registre failed: %v\n", err)
+		}
 	}
 
 	return parser.Message{}

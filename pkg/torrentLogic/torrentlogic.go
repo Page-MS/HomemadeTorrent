@@ -2,7 +2,6 @@ package torrentlogic
 
 import (
 	"HomemadeTorrent/pkg/registre"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -22,13 +21,6 @@ type TransferRelatedEvent int
 const (
 	RegisterUpdate MessageType = "RegisterUpdate"
 )
-
-type RegisterUpdatePayload struct {
-	FileID  string `json:"file_id"`
-	PartID  uint   `json:"part_id,omitempty"`
-	SiteID  string `json:"site_id"`
-	HasPart bool   `json:"has_part"`
-}
 
 // 1. On reçoit de notre site (UI) une demande de transfert
 // 2. On reçoit AskingForShasum (vas être supprimée après réponse)
@@ -123,7 +115,7 @@ type Message struct {
 
 // Main function to start a transfer
 // It will then autonomously handle it until it's finished
-func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, error error) {
+func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message, scChan <-chan Message) (success bool, error error) {
 	log.Print("\n[TORRENT] Starting transfer for file ID: ", fileID)
 	file := reg.GetFileByID(fileID)
 	if file == nil {
@@ -203,7 +195,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	error = registre.ReassembleFileFromParts(file.Name, BIN_PATH+"/"+currentSite+"/parts", BIN_PATH+"/"+currentSite+"/reassembled", reg)
 	if error != nil {
 		log.Printf("\n[TORRENT] Error while reassembling file %s: %v", file.Name, error)
-		return false, error
+		//return false, error
 	}
 	log.Printf("\n[TORRENT] File %s reassembled successfully !", file.Name)
 
@@ -215,32 +207,30 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		log.Printf("\n[TORRENT] Error while updating register to say we have the file %s: %v", file.Name, err)
 		return false, err
 	}
-	/*
-		// We ask for a SC
-		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
-		select {
-		case message := <-incomingMessagesChannel:
-			// If this is the authorziation for a critical section
-			if message.MessageType == StartSC {
-				log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", file.Name)
-				err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, 0, true, outputMessagesChannel)
-				if err != nil {
-					log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", file.Name, err)
-					return false, err
-				}
-				// We send the message announcing we have finished with our critical section
-				SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
 
-			} else {
-				err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
+	// We ask for a SC
+	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
+	log.Printf("\n[TORRENT] return skip : \n")
+	select {
+	case message := <-scChan:
+		log.Printf("\n[TORRENT] Message reçu %v: \n", message)
+		// If this is the authorziation for a critical section
+		if message.MessageType == StartSC {
+			log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", file.Name)
+			err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, 0, outputMessagesChannel, reg)
+			if err != nil {
+				log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", file.Name, err)
 				return false, err
 			}
-		case <-time.After(SC_TIMEOUT):
-			err = fmt.Errorf("ERROR: Timeout while waiting SC authorization ")
+			// We send the message announcing we have finished with our critical section
+			SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
+
+		} else {
+			err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
 			return false, err
 		}
-
-	*/
+	}
+	log.Printf("\n[TORRENT] return skip : \n")
 	return true, nil
 }
 
@@ -321,32 +311,6 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 		log.Printf("\n[TORRENT] Error while updating register to say we have the file part %s: %v", partID, err)
 		return err
 	}
-	/*
-		// We ask for a SC
-		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, "-1", 0, fileID, partID, "", outputMessagesChannel)
-		select {
-		case message := <-incomingMessagesChannel:
-			// If this is the authorziation for a critical section
-			if message.MessageType == StartSC {
-				log.Printf("\n[TORRENT] Received authorization to start critical section for file part %s, updating register of the others", partID)
-				err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, partID, true, outputMessagesChannel)
-				if err != nil {
-					log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", partID, err)
-					return err
-				}
-				// We send the message announcing we have finished with our critical section
-				SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, partID, "", outputMessagesChannel)
-
-			} else {
-				err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization  (in StartTransferForPart)")
-				return err
-			}
-		case <-time.After(SC_TIMEOUT):
-			err = fmt.Errorf("ERROR: Timeout while waiting SC authorization (in StartTransferForPart)")
-			return err
-		}
-	*/
-
 	log.Printf("\n[TORRENT] Transfer for part %d of file %s from peer %s succeeded !", partID, fileID, peerToAsk)
 
 	channelFin <- partID
@@ -492,58 +456,22 @@ func HandlePeerRespondingWithShasum(currentSiteID string, peerID string, fileID 
 }
 
 // Used when we obtain a critical section to update the register of the others
-func SendRegisterUpdateToPeer(senderID, transferID, targetID, fileID string, partID uint, hasPart bool, outputMessagesChannel chan<- Message) error {
-	// In JSON for easier reconstruction
-	payloadStruct := RegisterUpdatePayload{
-		FileID:  fileID,
-		PartID:  partID,
-		SiteID:  senderID,
-		HasPart: hasPart,
-	}
-	payloadBytes, err := json.Marshal(payloadStruct)
+func SendRegisterUpdateToPeer(senderID, transferID, targetID, fileID string, partID uint, outputMessagesChannel chan<- Message, reg *registre.Registre) error {
+	jsonReg, err := reg.ToJSON()
 	if err != nil {
-		return err
+		return fmt.Errorf("[TORRENT][ERROR] Erreur sur la transformation du regsitre en JSON : %v\n", err)
 	}
-
-	SendMessageToPeer(RegisterUpdate, false, senderID, transferID, targetID, None, fileID, partID, string(payloadBytes), outputMessagesChannel)
+	SendMessageToPeer(RegisterUpdate, false, senderID, transferID, targetID, None, fileID, partID, jsonReg, outputMessagesChannel)
+	log.Printf("[TORRENT] Send local updated register successfuly\n")
 	return nil
 }
 
 // Handling a register update message received from a peer, we update our register accordingly
 func HandleRegisterUpdateMessage(msg Message, reg *registre.Registre) error {
-	var payload RegisterUpdatePayload
-	err := json.Unmarshal([]byte(msg.Content), &payload)
+	err := reg.FromJSON(msg.Content)
 	if err != nil {
-		return fmt.Errorf("could not unmarshal register update payload: %v", err)
+		return fmt.Errorf("[TORRENT][ERROR] Update du registre: %v", err)
 	}
-	if payload.HasPart && payload.PartID != 0 {
-		err = reg.AddPeerHavingPart(payload.SiteID, payload.FileID, payload.PartID)
-		if err != nil {
-			return fmt.Errorf("could not update register to add peer having part: %v", err)
-		}
-		log.Printf("\n[TORRENT] Updated register to add peer %s having part %d of file %s", payload.SiteID, payload.PartID, payload.FileID)
-	} else {
-		err = reg.RemovePeerHavingPart(payload.SiteID, payload.FileID, payload.PartID)
-		if err != nil {
-			return fmt.Errorf("could not update register to remove peer having part: %v", err)
-		}
-		log.Printf("\n[TORRENT] Updated register to remove peer %s having part %d of file %s", payload.SiteID, payload.PartID, payload.FileID)
-	}
-	// If the partID is 0, it means it's an update for the whole file, we update the register accordingly
-	if payload.PartID == 0 {
-		if payload.HasPart {
-			err = reg.AddPeerHavingFile(payload.FileID, payload.SiteID)
-			if err != nil {
-				return fmt.Errorf("could not update register to add peer having file: %v", err)
-			}
-			log.Printf("\n[TORRENT] Updated register to add peer %s having file %s", payload.SiteID, payload.FileID)
-		} else {
-			err = reg.RemovePeerHavingFile(payload.FileID, payload.SiteID)
-			if err != nil {
-				return fmt.Errorf("could not update register to remove peer having file: %v", err)
-			}
-			log.Printf("\n[TORRENT] Updated register to remove peer %s having file %s", payload.SiteID, payload.FileID)
-		}
-	}
+	log.Printf("[TORRENT] Update Register from remote successfuly\n")
 	return nil
 }
