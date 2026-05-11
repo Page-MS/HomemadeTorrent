@@ -608,3 +608,48 @@ func (r *Registre) RemovePeerHavingPart(peerID string, fileID string, partID uin
 	}
 	return nil
 }
+
+// Merge fusionne un autre registre dans le registre courant.
+// Aucune information n'est supprimée, seules les nouvelles infos sont ajoutées.
+func (r *Registre) Merge(other *Registre) {
+	for _, peer := range other.Peers {
+		if !slices.Contains(r.Peers, peer) {
+			r.Peers = append(r.Peers, peer)
+		}
+	}
+	for _, otherFile := range other.Files {
+		// Vérifie si le fichier existe déjà
+		currentFile := r.GetFileByID(otherFile.ID)
+		if currentFile == nil {
+			r.Files = append(r.Files, otherFile)
+			continue
+		}
+		for _, peer := range otherFile.PeersThatHaveFileID {
+			if !slices.Contains(currentFile.PeersThatHaveFileID, peer) {
+				currentFile.PeersThatHaveFileID =
+					append(currentFile.PeersThatHaveFileID, peer)
+			}
+		}
+		for _, otherPart := range otherFile.FileParts {
+			var currentPart *FilePart
+			// Recherche de la part correspondante
+			for i := range currentFile.FileParts {
+				if currentFile.FileParts[i].FilePartID == otherPart.FilePartID {
+					currentPart = &currentFile.FileParts[i]
+					break
+				}
+			}
+			if currentPart == nil {
+				currentFile.FileParts =
+					append(currentFile.FileParts, otherPart)
+				continue
+			}
+			for _, peer := range otherPart.PeersThatHaveFilePartID {
+				if !slices.Contains(currentPart.PeersThatHaveFilePartID, peer) {
+					currentPart.PeersThatHaveFilePartID =
+						append(currentPart.PeersThatHaveFilePartID, peer)
+				}
+			}
+		}
+	}
+}

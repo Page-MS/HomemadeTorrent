@@ -173,7 +173,6 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 
 	// We ask for a SC
 	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
-	log.Printf("\n[TORRENT] return skip : \n")
 	select {
 	case message := <-scChan:
 		log.Printf("\n[TORRENT] Message reçu %v: \n", message)
@@ -193,7 +192,6 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 			return false, err
 		}
 	}
-	log.Printf("\n[TORRENT] return skip : \n")
 	return true, nil
 }
 
@@ -426,10 +424,12 @@ func SendRegisterUpdateToPeer(senderID, transferID, targetID, fileID string, par
 
 // Handling a register update message received from a peer, we update our register accordingly
 func HandleRegisterUpdateMessage(msg Message, reg *registre.Registre) error {
-	err := reg.FromJSON(msg.Content)
+	remoteReg := registre.NewRegistre()
+	err := remoteReg.FromJSON(msg.Content)
 	if err != nil {
 		return fmt.Errorf("[TORRENT][ERROR] Update du registre: %v", err)
 	}
+	reg.Merge(remoteReg)
 	log.Printf("[TORRENT] Update Register from remote successfuly\n")
 	return nil
 }
