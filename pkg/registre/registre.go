@@ -551,3 +551,60 @@ func (r *Registre) FromJSON(data string) error {
 	}
 	return nil
 }
+
+// Func for updating the register
+func (r *Registre) AddPeerHavingFile(peerID string, fileID string) error {
+	file := r.GetFileByID(fileID)
+	if file == nil {
+		log.Printf("[REGISTRE] File with ID %s not found in register\n", fileID)
+		return fmt.Errorf("file with ID %s not found in register", fileID)
+	}
+	// If the peer doesn't already have the file, we add it
+	if !slices.Contains(file.PeersThatHaveFileID, peerID) {
+		file.PeersThatHaveFileID = append(file.PeersThatHaveFileID, peerID)
+		log.Printf("[REGISTRE] Peer having file part added")
+	}
+	return nil
+}
+
+func (r *Registre) RemovePeerHavingFile(peerID string, fileID string) error {
+	file := r.GetFileByID(fileID)
+	if file == nil {
+		log.Printf("[REGISTRE] File with ID %s not found in register\n", fileID)
+		return fmt.Errorf("file with ID %s not found in register", fileID)
+	}
+	if slices.Contains(file.PeersThatHaveFileID, peerID) {
+		file.PeersThatHaveFileID = slices.Delete(file.PeersThatHaveFileID, slices.Index(file.PeersThatHaveFileID, peerID), slices.Index(file.PeersThatHaveFileID, peerID)+1)
+		log.Printf("[REGISTRE] Peer having file remove")
+	}
+	return nil
+}
+
+// Func for updating the register
+func (r *Registre) AddPeerHavingPart(peerID string, fileID string, partID uint) error {
+	part := r.GetFilePart(fileID, partID)
+	if part == nil {
+		log.Printf("[REGISTRE] File part with ID %d not found in file with ID %s\n", partID, fileID)
+		return fmt.Errorf("file part with ID %d not found in file with ID %s", partID, fileID)
+	}
+	// If the peer doesn't already have the file part, we add it
+	if !slices.Contains(part.PeersThatHaveFilePartID, peerID) {
+		part.PeersThatHaveFilePartID = append(part.PeersThatHaveFilePartID, peerID)
+		log.Printf("[REGISTRE] Peer having part added")
+	}
+	return nil
+}
+
+// Func for updating the register
+func (r *Registre) RemovePeerHavingPart(peerID string, fileID string, partID uint) error {
+	part := r.GetFilePart(fileID, partID)
+	if part == nil {
+		log.Printf("[REGISTRE] File part with ID %d not found in file with ID %s\n", partID, fileID)
+		return fmt.Errorf("file part with ID %d not found in file with ID %s", partID, fileID)
+	}
+	if slices.Contains(part.PeersThatHaveFilePartID, peerID) {
+		part.PeersThatHaveFilePartID = slices.Delete(part.PeersThatHaveFilePartID, slices.Index(part.PeersThatHaveFilePartID, peerID), slices.Index(part.PeersThatHaveFilePartID, peerID)+1)
+		log.Printf("[REGISTRE] Peer having part removed")
+	}
+	return nil
+}

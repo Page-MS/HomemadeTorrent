@@ -8,8 +8,9 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 )
+
+// This file contains the guards of the torrent logic, most of the utility functions are in registre.go
 
 type MessageType string
 
@@ -17,16 +18,20 @@ type PartTransferStatus int
 
 type TransferRelatedEvent int
 
+// I considered adding a register field to the messages but this seemed more elegant
+const (
+	RegisterUpdate MessageType = "RegisterUpdate"
+)
+
 // 1. On reçoit de notre site (UI) une demande de transfert
 // 2. On reçoit AskingForShasum (vas être supprimée après réponse)
 // 2. On reçoit AskingForContent (vas être supprimée après réponse)
-
-const CONNEXION_TIMEOUT = 10 * time.Second
 
 const BIN_PATH = registre.BIN_PATH_FROM_MAIN
 
 const (
 	AskingFromSC           MessageType = "AskingFromSC"
+	StartSC                MessageType = "StartSC"
 	DoneWithSC             MessageType = "DoneWithSC"
 	TransferRelatedMessage MessageType = "TransferRelatedMessage"
 	StartTransfers         MessageType = "StartTransfers"
@@ -41,46 +46,14 @@ const (
 	ReceivingContent
 )
 
-// All possibles states of a transfer
-const (
-	StateNotStarted PartTransferStatus = iota
-	StateError
-	StateRetrying
-	StateAskedForAvailability
-	StateReceivedShasum
-	StateAskedForContent
-	StateReceivedContent
-	StateCompleted
-)
-
 // Messages types
 var messageName = map[MessageType]string{
 	AskingFromSC:           "Asking for a critical section",
+	StartSC:                "Authorised to start the critical section",
 	DoneWithSC:             "Done with critical section",
 	TransferRelatedMessage: "Message related to a transfer", // the controller doesn't have to look into it when sending it
 	AskingForShasum:        "Asking for the shasum of a part",
 	AskingForContent:       "Asking for the content of a part",
-}
-
-// Strings for transfer states
-var stateName = map[PartTransferStatus]string{
-	StateNotStarted:           "not started",
-	StateError:                "error",
-	StateRetrying:             "retrying",
-	StateAskedForAvailability: "asked for availability",
-	StateReceivedShasum:       "received shasum",
-	StateAskedForContent:      "asked for content",
-	StateReceivedContent:      "received content",
-	StateCompleted:            "completed",
-}
-
-// This file contains the guards of the torrent logic, most of the utility functions are in registre.go
-
-type PartTransfer struct {
-	partID    uint
-	peerID    string
-	receiving bool
-	state     PartTransferStatus
 }
 
 type ongoingTransfer struct {
@@ -103,9 +76,9 @@ type Message struct {
 	Content              string
 }
 
-// Main function to start a transfer
+// Main function to start a transfer (ask for a file)
 // It will then autonomously handle it until it's finished
-func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, error error) {
+func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message, scChan <-chan Message) (success bool, error error) {
 	log.Print("\n[TORRENT] Starting transfer for file ID: ", fileID)
 	file := reg.GetFileByID(fileID)
 	if file == nil {
@@ -134,6 +107,7 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 	// WaitGroup for synchronizing the transfers goroutines
 	var wg sync.WaitGroup
 	// We make a tab of channels to transmit the messages to the goroutines
+	// +1 for handling the file parts starting at one
 	partIncomingChannels := make([]chan Message, file.NumberOfParts+1)
 	for i := uint(1); i <= file.NumberOfParts; i++ {
 		transfer.partsToAskIDs[i-1] = i
@@ -187,6 +161,39 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		return false, error
 	}
 	log.Printf("\n[TORRENT] File %s reassembled successfully !", file.Name)
+
+	// SC handling
+	// We update our register to say we have the file
+	log.Printf("\n[TORRENT] FileID : %s", fileID)
+	err := reg.AddPeerHavingFile(currentSite, fileID)
+	if err != nil {
+		log.Printf("\n[TORRENT] Error while updating register to say we have the file %s: %v", file.Name, err)
+		return false, err
+	}
+
+	// We ask for a SC
+	SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
+	log.Printf("\n[TORRENT] return skip : \n")
+	select {
+	case message := <-scChan:
+		log.Printf("\n[TORRENT] Message reçu %v: \n", message)
+		// If this is the authorziation for a critical section
+		if message.MessageType == StartSC {
+			log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", file.Name)
+			err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, 0, outputMessagesChannel, reg)
+			if err != nil {
+				log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", file.Name, err)
+				return false, err
+			}
+			// We send the message announcing we have finished with our critical section
+			SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
+
+		} else {
+			err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
+			return false, err
+		}
+	}
+	log.Printf("\n[TORRENT] return skip : \n")
 	return true, nil
 }
 
@@ -260,6 +267,13 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 			return err
 		}
 	}
+	// SC handling
+	// We update our register to say we have the file
+	err = registre.AddPeerHavingPart(currentSite, fileID, partID)
+	if err != nil {
+		log.Printf("\n[TORRENT] Error while updating register to say we have the file part %s: %v", partID, err)
+		return err
+	}
 	log.Printf("\n[TORRENT] Transfer for part %d of file %s from peer %s succeeded !", partID, fileID, peerToAsk)
 
 	channelFin <- partID
@@ -286,9 +300,6 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 		if err != nil {
 			return false, err
 		}
-	// Timeout
-	case <-time.After(CONNEXION_TIMEOUT):
-		return false, nil
 	}
 	// Send message asking for content
 	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
@@ -313,13 +324,11 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 		}
 		err = os.WriteFile(partFilePath, []byte(content), 0644)
 		if err != nil {
+			log.Printf("\n[TORRENT] Error while writing part: %v", err)
 			return false, err
 		}
-		// WOHOOO
 		log.Printf("\n[TORRENT] Saved part file: %s\n", partFilePath)
 		return true, nil
-	case <-time.After(CONNEXION_TIMEOUT):
-		return false, nil
 	}
 }
 
@@ -401,5 +410,26 @@ func HandlePeerRespondingWithShasum(currentSiteID string, peerID string, fileID 
 		return fmt.Errorf("shasum calculated %s does not match shasum received %s for part %d of file %s", shasumFromRegister, shasum, partID, fileID)
 	}
 	log.Printf("\n[TORRENT] Shasum for part %d of file %s is correct", partID, fileID)
+	return nil
+}
+
+// Used when we obtain a critical section to update the register of the others
+func SendRegisterUpdateToPeer(senderID, transferID, targetID, fileID string, partID uint, outputMessagesChannel chan<- Message, reg *registre.Registre) error {
+	jsonReg, err := reg.ToJSON()
+	if err != nil {
+		return fmt.Errorf("[TORRENT][ERROR] Erreur sur la transformation du regsitre en JSON : %v\n", err)
+	}
+	SendMessageToPeer(RegisterUpdate, false, senderID, transferID, targetID, None, fileID, partID, jsonReg, outputMessagesChannel)
+	log.Printf("[TORRENT] Send local updated register successfuly\n")
+	return nil
+}
+
+// Handling a register update message received from a peer, we update our register accordingly
+func HandleRegisterUpdateMessage(msg Message, reg *registre.Registre) error {
+	err := reg.FromJSON(msg.Content)
+	if err != nil {
+		return fmt.Errorf("[TORRENT][ERROR] Update du registre: %v", err)
+	}
+	log.Printf("[TORRENT] Update Register from remote successfuly\n")
 	return nil
 }
