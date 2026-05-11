@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+// This file contains the guards of the torrent logic, most of the utility functions are in registre.go
+
 type MessageType string
 
 type PartTransferStatus int
@@ -58,18 +60,6 @@ const (
 	ReceivingContent
 )
 
-// All possibles states of a transfer
-const (
-	StateNotStarted PartTransferStatus = iota
-	StateError
-	StateRetrying
-	StateAskedForAvailability
-	StateReceivedShasum
-	StateAskedForContent
-	StateReceivedContent
-	StateCompleted
-)
-
 // Messages types
 var messageName = map[MessageType]string{
 	AskingFromSC:           "Asking for a critical section",
@@ -78,27 +68,6 @@ var messageName = map[MessageType]string{
 	TransferRelatedMessage: "Message related to a transfer", // the controller doesn't have to look into it when sending it
 	AskingForShasum:        "Asking for the shasum of a part",
 	AskingForContent:       "Asking for the content of a part",
-}
-
-// Strings for transfer states
-var stateName = map[PartTransferStatus]string{
-	StateNotStarted:           "not started",
-	StateError:                "error",
-	StateRetrying:             "retrying",
-	StateAskedForAvailability: "asked for availability",
-	StateReceivedShasum:       "received shasum",
-	StateAskedForContent:      "asked for content",
-	StateReceivedContent:      "received content",
-	StateCompleted:            "completed",
-}
-
-// This file contains the guards of the torrent logic, most of the utility functions are in registre.go
-
-type PartTransfer struct {
-	partID    uint
-	peerID    string
-	receiving bool
-	state     PartTransferStatus
 }
 
 type ongoingTransfer struct {
@@ -121,7 +90,7 @@ type Message struct {
 	Content              string
 }
 
-// Main function to start a transfer
+// Main function to start a transfer (ask for a file)
 // It will then autonomously handle it until it's finished
 func StartOutgoingTransfer(transferID string, fileID string, currentSite string, reg *registre.Registre, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, error error) {
 	log.Print("\n[TORRENT] Starting transfer for file ID: ", fileID)
