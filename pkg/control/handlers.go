@@ -14,7 +14,7 @@ import (
 
 // handleDistributedFile fait le lien avec distributed_file.go
 func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
-	// conversion du message Parser vers message de control interne
+	// conversion du message Parser vers message file repartie
 	msgCtrl, err := c.ParserMessageToFileMessage(pMsg)
 	if err != nil {
 		log.Printf("[CONTROLLER] Conversion message parser vers message file impossible: %v\n", err)
@@ -37,6 +37,7 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 		responseMsg = c.DistFile.SCStopFromBaseApp()
 	}
 
+	// Si section critique accordé on notifie la couche applicative
 	if isReady {
 		log.Printf("[CONTROLLER] >>> SECTION CRITIQUE ACCORDÉE SITE %s\n", c.SiteID)
 		c.TorrentScChan <- torrentlogic.Message{
@@ -44,6 +45,7 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 		}
 	}
 
+	// conversion du message file repartie vers message parser
 	returnMsg, err := c.FileMessageToParserMessage(responseMsg)
 	if err != nil {
 		log.Printf("[CONTROLLER] Conversion message file vers message parser impossible | Message: %+v | Erreur: %v\n", returnMsg, err)
@@ -171,11 +173,12 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 	switch pMsg.Action {
 	case string(torrentlogic.TransferRelatedMessage), string(torrentlogic.StartTransfers):
 		{
+			// Si pas transfersID c'est une demande pour un nouveau transfer
 			if len(msgTorrent.TransferID) == 0 {
 				msgTorrent.TransferID = uuid.NewString()
 			}
 
-			// TODO: Voir avec Page quand delete la go-routine (deleteme?)
+			// On lance une goroutine par transfer et on stocke les points d'entrées et de sortie
 			inputChan, exist := c.InputTorrentTransfers[msgTorrent.TransferID]
 			if !exist {
 				inputChan = make(chan torrentlogic.Message, 100)
@@ -186,7 +189,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			return parser.Message{}
 		}
 
-	// Demande si un fichier existe
+	// Demande si un fichier existe dans le registre du site
 	case string(torrentlogic.AskingForShasum):
 		{
 			go torrentlogic.HandlePeerAskingIfWeHavePart(
@@ -200,6 +203,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			)
 		}
 
+	// Demande le contenu du bout de fichier
 	case string(torrentlogic.AskingForContent):
 		torrentlogic.HandlePeerAskingForPartContent(
 			c.SiteID,
@@ -211,6 +215,7 @@ func (c *Controller) handleTorrent(pMsg parser.Message) parser.Message {
 			c.OutputTorrentChan,
 		)
 
+	// Demande de mise à jour du registre suite à un télechargement
 	case string(torrentlogic.RegisterUpdate):
 		err = torrentlogic.HandleRegisterUpdateMessage(msgTorrent, c.Reg)
 		if err != nil {

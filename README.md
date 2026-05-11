@@ -25,19 +25,13 @@ sh anneau.sh
 ```
 ## UI
 You can then open in a browser the link that appeared in the logs.
-From there, you can initiate downloads and see the state of the network
+From there, you can initiate downloads and see the state of the network. The adresses are usually :
+- Site 1: `http://localhost:8080`
+- Site 2: `http://localhost:8081`
+- Site 3: `http://localhost:8082`
 
 ## Test scenarios
-In a second terminal, run one of the test scripts:
-```bash
-sh sc_request.sh
-sh snapshot.sh
-```
-These scripts simulate either:
-- a critical section request scenario, or
-- a snapshot scenario initiated from the last node of the ring.
-
-These scenarios are intended to test the current state of the system logic.
+Once in the ui, you can download the files not present on your site.
 
 ## Logs
 Each site writes its logs into a dedicated file:

@@ -32,7 +32,6 @@ type Controller struct {
 	TorrentScChan         chan torrentlogic.Message
 }
 
-// Adapter cette valeur en focntion de la convention choisie
 const BROADCAST string = "-1"
 
 var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
@@ -86,11 +85,11 @@ func NewSiteDirectory(siteIDs []string) SiteDirectory {
 	}
 }
 
-// HandleIncomingFromNetwork s'occupe de recevoir les message texte, synchronise les horloges et fait le routage.
+// HandleIncomingFromNetwork s'occupe de recevoir les message texte venant du réseau, synchronise les horloges et fait le routage.
 func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	var responses []string
 
-	// -------------- Decodage ------------------
+	// ============= Decodage str -> struct ===============
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
 		log.Printf("[CONTROLLER][NETWORK] Erreur decodage: %v\n", err)
@@ -99,7 +98,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	log.Printf("[CONTROLLER][NETWORK] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
 
-	// -------------- Routage ------------------------
+	// ================ Routage anneau ====================
 	processLocal, forward := c.routeMessage(pMsg)
 
 	if processLocal && c.SeenMessages[pMsg.Id] {
@@ -122,13 +121,13 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		return responses
 	}
 
-	// ------------- synchro des horloges ------------
+	// ============= synchro des horloges ==============
 	c.Lamport.Update(pMsg.Stamp)
 	if len(pMsg.Vect) > 0 {
 		c.Vector.Update(pMsg.Vect)
 	}
 
-	// ------------- Logique Snapshot --------------
+	//=============== Logique Snapshot =================
 
 	// Chaque réception diminue le bilan local.
 	// On ne décrémente le bilan que pour les messages torrent pas pour les autres messages
@@ -146,18 +145,6 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		if msgSnapshot != "" {
 			responses = append(responses, msgSnapshot)
 		}
-
-		// Lance le script avec un argument //TODO : Debug prépost (a enlever)
-		/*
-			if c.SiteID == "1" {
-				log.Printf("[TEST] Fake recepetion enclenchée\n")
-				cmd := exec.Command("../../simulations/msg.sh")
-				_, err := cmd.CombinedOutput()
-				if err != nil {
-					log.Println("Erreur :", err)
-				}
-			}
-		*/
 	}
 
 	// Détection des messages Prépost : Envoyé blanc, reçu rouge
@@ -176,7 +163,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, responseMsg)
 	}
 
-	// ------------- Logique controler --------------
+	// ==================== Logique dispatcher ======================
 
 	log.Printf("[CONTROLLER][NETWORK] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
 
@@ -184,7 +171,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	var returnMsg parser.Message
 	switch pMsg.Action {
 
-	// exclusion mutuelle
+	// file répartie
 	case string(distributed_file.SC_REQUEST), string(distributed_file.SC_LIBERATION), string(distributed_file.ACK):
 		log.Printf("[CONTROLLER][NETWORK] Appel file répartie\n")
 		returnMsg = c.handleDistributedFile(pMsg)
@@ -204,7 +191,8 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 		return responses
 	}
 
-	// ---------- Encodage reponse ----------------
+	// ============= Encodage reponse =================
+	// Si action vide alors c'est un message vide -> pas besoin d'encoder
 	if returnMsg.Action == "" {
 		return responses
 	}
@@ -217,14 +205,17 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	return append(responses, pString)
 }
 
+// HandleIncomingFromLocal gère la reception des messages venant du UI et de la couche applicative (donc pas de routage)
 func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 	var responses []string
+	// ============ Decodage ======================
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
 		log.Printf("[CONTROLLER][LOCAL] Erreur décodage commande locale: %v\n", err)
 		return nil
 	}
 
+	// ============== Horloges =================
 	c.Lamport.Tick()
 	c.Vector.Tick()
 
@@ -263,6 +254,8 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 		returnMsg.Vect = make([]int, len(c.NetworkDirectory.IndexToID))
 	}
 
+	// ================= Encodage ===============
+	// Si pas d'actions alors pas besoin d'encoder
 	if returnMsg.Action == "" {
 		return responses
 	}
@@ -289,6 +282,7 @@ func (c *Controller) getIdFromSIteIndex(index int) string {
 	return c.NetworkDirectory.IndexToID[index]
 }
 
+// routeMessage gère le routage d'un anneau
 func (c *Controller) routeMessage(pMsg parser.Message) (processLocal bool, forward bool) {
 	// Vérifier que les informations pour le routage sont présentes
 	if len(pMsg.Sender) == 0 || len(pMsg.Dest) == 0 {
