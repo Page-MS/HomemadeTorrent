@@ -9,7 +9,7 @@ PROJECT_DIR="../src/homemadeTorrent"
 N=3
 rm -f "$FIFO"
 mkfifo "$FIFO"
-mkdir -p $LOG_DIR
+mkdir -p "$LOG_DIR"
 
 # Supprimer les données des sites des précédentes executions
 TARGET="../bin"
