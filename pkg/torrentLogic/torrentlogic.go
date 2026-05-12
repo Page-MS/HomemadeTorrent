@@ -124,17 +124,6 @@ func StartOutgoingTransfer(transferID string, fileID string, currentSite string,
 		}
 	}()
 	PrintTransferStatus(transfer)
-	// TODO: Debug prépost
-	/*
-		if currentSite == "3" {
-			log.Printf("[TEST] snapshot enclenchée\n")
-			cmd := exec.Command("../../pkg/user_input/ui_hooks/startSnapshot.sh", "1")
-			_, err := cmd.CombinedOutput()
-			if err != nil {
-				log.Println("Erreur :", err)
-			}
-		}
-	*/
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		for n := range transfersResultsChannel {
@@ -265,7 +254,6 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 			return err
 		}
 	}
-	// SC handling
 	// We update our register to say we have the file
 	err = registre.AddPeerHavingPart(currentSite, fileID, partID)
 	if err != nil {

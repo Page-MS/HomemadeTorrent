@@ -52,6 +52,16 @@ func CalculateShasum(filePath string) string {
 	}
 	defer file.Close()
 
+	// vérifier que le fichier existe et sa taille
+	info, err := file.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if info.Size() == 0 {
+		log.Printf("[DEBUG] Calcul SHA sur %s | size=%d bytes\n", filePath, info.Size())
+		log.Printf("[WARNING] fichier vide détecté: %s\n", filePath)
+	}
+
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
 		log.Fatal(err)
@@ -59,6 +69,16 @@ func CalculateShasum(filePath string) string {
 
 	//fmt.Printf("%x", h.Sum(nil))
 	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func CalculateShasumFromBytes(data []byte) string {
+	h := sha256.New()
+	h.Write(data)
+	dataShasum := fmt.Sprintf("%x", h.Sum(nil))
+	if dataShasum == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
+		log.Printf("[WARNING] Shasum calculé sur data vide détecté\n")
+	}
+	return dataShasum
 }
 
 func (r *Registre) IsPeerInRegister(peerID string) bool {
@@ -118,7 +138,7 @@ func SplitFile(filePath string, destination string) ([]FilePart, error) {
 		}
 		// get the content of the file part
 		filePartContent := make([]byte, partSize)
-		_, err := file.Read(filePartContent)
+		_, err := io.ReadFull(file, filePartContent)
 		if err != nil {
 			return nil, fmt.Errorf("could not read file part: %v", err)
 		}
@@ -129,8 +149,9 @@ func SplitFile(filePath string, destination string) ([]FilePart, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not write file part: %v", err)
 		}
+
 		//calculate the shasum of the file part
-		filePartShasum := CalculateShasum(partFileName)
+		filePartShasum := CalculateShasumFromBytes(filePartContent)
 		if err != nil {
 			return nil, fmt.Errorf("could not calculate shasum: %v", err)
 		} else {
