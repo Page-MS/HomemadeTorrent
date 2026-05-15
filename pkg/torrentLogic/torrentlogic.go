@@ -241,13 +241,34 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 		log.Printf("\n[TORRENT] Transfer for part %d of file %s from peer %s failed, retrying with another peer if available", partID, fileID, peerToAsk)
 		// We remove the peer that failed from the list of peers to ask and we try again with another peer if available
 		peersWithPart = removeElementFromStringSlice(peersWithPart, peerToAsk)
-		if len(peersWithPart) == 0 {
-			log.Printf("\n[TORRENT] No more peer to ask for part %d of file %s, transfer failed for this part", partID, fileID)
-			err = fmt.Errorf("no more peer to ask for part %d of file %s, transfer failed for this part", partID, fileID)
-			channelFin <- partID
-			wg.Done()
+		// We remove the peer that failed from the register as a part owner  and then ask for a critical section
+		err = registre.RemovePeerHavingPart(peerToAsk, fileID, partID)
+		if err != nil {
+			log.Printf("\n[TORRENT] Error while updating register to remove peer %s as owner of part %d of file %s: %v", peerToAsk, partID, fileID, err)
 			return err
 		}
+		// We ask for a SC
+		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
+		select {
+		case message := <-incomingMessagesChannel:
+			log.Printf("\n[TORRENT] Message reçu %v: \n", message)
+			// If this is the authorziation for a critical section
+			if message.MessageType == StartSC {
+				log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", fileID)
+				err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, 0, outputMessagesChannel, registre)
+				if err != nil {
+					log.Printf("\n[TORRENT] Error while sending register update to peers for file : %v", err)
+					return err
+				}
+				// We send the message announcing we have finished with our critical section
+				SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
+
+			} else {
+				err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
+				return err
+			}
+		}
+
 		peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
 		transferSuccess, err = AskPeerForPart(transferID, peerToAsk, fileID, partID, currentSite, registre, &partTransferWg, incomingMessagesChannel, outputMessagesChannel)
 		if err != nil {
