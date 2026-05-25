@@ -1,6 +1,7 @@
 package control
 
 import (
+	"HomemadeTorrent/pkg/delay"
 	"HomemadeTorrent/pkg/snapshot"
 	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
@@ -30,6 +31,7 @@ type Controller struct {
 	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
 	OutputTorrentChan     chan torrentlogic.Message
 	TorrentScChan         chan torrentlogic.Message
+	Delay *delay.Delay
 }
 
 const BROADCAST string = "-1"
@@ -41,7 +43,13 @@ var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
 }
 
 // NewController initialise un nouveau dispatcher central
-func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Controller {
+func NewController(
+	siteID string,
+	allSiteIDs []string,
+	r *registre.Registre,
+	delay *delay.Delay,
+) *Controller {
+
 	clk := &clock.LamportClock{}
 	dir := NewSiteDirectory(allSiteIDs)
 
@@ -62,6 +70,7 @@ func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Co
 		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
 		TorrentScChan:         make(chan torrentlogic.Message),
 		Reg:                   r,
+		Delay: delay,
 	}
 }
 

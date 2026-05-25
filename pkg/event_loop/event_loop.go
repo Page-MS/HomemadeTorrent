@@ -2,6 +2,7 @@ package event_loop
 
 import (
 	"HomemadeTorrent/pkg/control"
+	"HomemadeTorrent/pkg/delay"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
 	"HomemadeTorrent/pkg/webui"
@@ -39,14 +40,22 @@ func Start(allSiteIDs []string, siteID string) {
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
 
+	// Delay Handling
+	delayHandler := delay.NewDelay();
+
 	// Init Controler et Registre
 	register := registre.Registre{}
 	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
 	registre.InitialiseRegistre(siteID, &register)
 
-	controler := control.NewController(siteID, allSiteIDs, &register)
+	controler := control.NewController(
+		siteID,
+		allSiteIDs,
+		&register,
+		&delayHandler,
+	)
 
-	go listenStdEntry(eventQueue)
+	go listenStdEntry(eventQueue, &delayHandler)
 	go listenUserUIInput(eventQueue, siteID, controler, &register)
 	go listenLocalTorrentOutput(eventQueue, controler)
 	go siteLogic(processingChan, eventQueue, controler)
@@ -68,7 +77,10 @@ func Start(allSiteIDs []string, siteID string) {
 	}
 }
 
-func listenStdEntry(queue chan<- Event) {
+func listenStdEntry(
+	queue chan<- Event,
+	delay *delay.Delay,
+) {
 	//fmt.Println("DEBUG: Le lecteur clavier est bien lancé")
 	scanner := bufio.NewScanner(os.Stdin)
 	const maxCapacity = 10 * 1024 * 1024 // 10 Mo pour pouvoir envoyer le registre
@@ -85,6 +97,7 @@ func listenStdEntry(queue chan<- Event) {
 
 				log.Printf("[EVENT_LOOP] Message réseau lu en entrée: %s\n", msg)
 
+				delay.WaitNetworkDelay();
 				queue <- Event{
 					Type:   ReadMessage,
 					Source: FromNetwork,
@@ -111,7 +124,12 @@ func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Con
 			Data:   msg,
 		}
 	}
-	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register)
+	webui.StartWebUI(
+		siteID,
+		controler.SiteIndex,
+		onMsg,
+		register,
+	)
 }
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
