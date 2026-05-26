@@ -63,33 +63,27 @@ func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
 	return nc.Controler.HandleIncomingFromLocal(raw)
 }
 
-// routeMessage gère le routage d'un anneau
+// routeMessage gère le routage
 func (nc *NetworkControler) routeMessage(pMsg parser.Message) (processLocal bool, forward bool) {
-	// Vérifier que les informations pour le routage sont présentes
 	if len(pMsg.Sender) == 0 || len(pMsg.Dest) == 0 {
-		log.Printf("[ROUTAGE] Impossible de router ce message incomplet (pas de destinataire ou d'envoyeur), ignoré\n")
 		return false, false
 	}
 
-	// Cas Message pour soi meme
+	// Ne jamais re-émettre ses propres messages
 	if pMsg.Sender == nc.SiteID {
-		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré\n")
 		return false, false
 	}
 
-	// Cas broadcast
+	// Broadcast : traiter ET re-émettre
 	if pMsg.Dest == control.BROADCAST {
-		log.Printf("[ROUTAGE] Broadcast reçu sur site %s", nc.SiteID)
 		return true, true
 	}
 
-	// Cas message pour ce site
+	// Message pour ce site : traiter, ne pas re-émettre
 	if pMsg.Dest == nc.SiteID {
-		log.Printf("[ROUTAGE] Message pour ce site (%s)", nc.SiteID)
 		return true, false
 	}
 
-	// Sinon → forward uniquement
-	log.Printf("[ROUTAGE] Message pour %s, forward depuis %s", pMsg.Dest, nc.SiteID)
+	// Message pour quelqu'un d'autre : re-émettre sans traiter
 	return false, true
 }

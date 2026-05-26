@@ -20,7 +20,7 @@ find "$TARGET" -mindepth 1 -path "$TARGET/$KEEP" -o -path "$TARGET/$KEEP/*" -pru
 # Construction de la liste des membres
 IDS=""
 for i in $(seq 1 $N); do
-    IDS="$IDS $i"
+  IDS="$IDS $i"
 done
 
 echo "Logs dirigés vers : $LOG_DIR"

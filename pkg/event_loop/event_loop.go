@@ -36,6 +36,10 @@ type Event struct {
 }
 
 func Start(allSiteIDs []string, siteID string) {
+	// Debug
+	dir, _ := os.Getwd()
+	log.Printf("working dir: %s", dir)
+
 	// Channels
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
@@ -46,6 +50,8 @@ func Start(allSiteIDs []string, siteID string) {
 	registre.InitialiseRegistre(siteID, &register)
 
 	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register)
+
+	log.Printf("SiteID: %s, Index: %d, All sites: %s\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs)
 
 	go listenStdEntry(eventQueue)
 	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register)
