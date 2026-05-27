@@ -43,6 +43,8 @@ func Start(allSiteIDs []string, siteID string) {
 	register := registre.Registre{}
 	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
 	registre.InitialiseRegistre(siteID, &register)
+	register.AddNewUserToRegister("Patrick", "../../bin/")
+	register.PrintRegister()
 
 	controler := control.NewController(siteID, allSiteIDs, &register)
 

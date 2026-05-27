@@ -289,6 +289,24 @@ func (r *Registre) GetPeerList() []string {
 	return r.Peers
 }
 
+func (r *Registre) AddNewUserToRegister(username string, userDirectory string) bool {
+	// If the username is already present in the register on pète un cable (on retourne false)
+	if r.IsPeerInRegister(username) {
+		log.Printf("[REGISTRE] User %s already in register\n", username)
+		return false
+	}
+	r.Peers = append(r.Peers, username)
+	if _, err := os.Stat(BIN_PATH_FROM_MAIN + "/" + userDirectory); os.IsNotExist(err) {
+		err = os.MkdirAll(BIN_PATH_FROM_MAIN+"/"+userDirectory, 0755)
+		if err != nil {
+			log.Printf("[REGISTRE] Error creating user folder: %v\n", err)
+			return false
+		}
+	}
+	log.Printf("[REGISTRE] User %s added to register\n", username)
+	return true
+}
+
 // Return the data structure of the files in the register
 func (r *Registre) GetFileList() []File {
 	if len(r.Files) == 0 {
