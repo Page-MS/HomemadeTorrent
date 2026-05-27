@@ -32,15 +32,14 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	// ================ Routage anneau ====================
+	// TODO: comprendre pourquoi ca ne marche pas
 	if nc.SeenMessages[pMsg.Id] {
 		log.Printf("[NETWORK CONTROLER] Message déjà vu, ignoré\n")
 		return nil
 	}
 
 	processLocal, forward := nc.routeMessage(pMsg)
-	if processLocal {
-		nc.SeenMessages[pMsg.Id] = true
-	}
+	nc.SeenMessages[pMsg.Id] = true
 	if forward {
 		responses = append(responses, raw)
 	}
@@ -71,16 +70,19 @@ func (nc *NetworkControler) routeMessage(pMsg parser.Message) (processLocal bool
 
 	// Ne jamais re-émettre ses propres messages
 	if pMsg.Sender == nc.SiteID {
+		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré\n")
 		return false, false
 	}
 
 	// Broadcast : traiter ET re-émettre
 	if pMsg.Dest == control.BROADCAST {
+		log.Printf("[ROUTAGE] Broadcast reçu sur site %s\n", nc.SiteID)
 		return true, true
 	}
 
 	// Message pour ce site : traiter, ne pas re-émettre
 	if pMsg.Dest == nc.SiteID {
+		log.Printf("[ROUTAGE] Message pour ce site\n")
 		return true, false
 	}
 

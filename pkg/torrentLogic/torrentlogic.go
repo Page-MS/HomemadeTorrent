@@ -228,7 +228,6 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 	// We take a random peer in the list of peers to not always ask the same peer first
 	peersWithPart := registre.GetPeersHavingPart(fileID, partID)
 	peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
-	log.Printf("\n[TORRENT] Asking peer %s for part %d of file %s", peerToAsk, partID, fileID)
 	var partTransferWg sync.WaitGroup
 	transferSuccess, err := AskPeerForPart(transferID, peerToAsk, fileID, partID, currentSite, registre, &partTransferWg, incomingMessagesChannel, outputMessagesChannel)
 	if err != nil {
@@ -348,7 +347,7 @@ func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, 
 		PartID:               partID,
 		Content:              content,
 	}
-	log.Printf("\n[TORRENT] Message details:\n Type: %s\n Sender: %s\n Target: %s\n TransferID: %s\n FileID: %s\n PartID: %d\n Content: %s\n", messageName[message.MessageType], message.SenderID, message.TargetID, message.TransferID, message.FileID, message.PartID, message.Content)
+	//log.Printf("\n[TORRENT] Message details:\n Type: %s\n Sender: %s\n Target: %s\n TransferID: %s\n FileID: %s\n PartID: %d\n Content: %s\n", messageName[message.MessageType], message.SenderID, message.TargetID, message.TransferID, message.FileID, message.PartID, message.Content)
 	outputMessagesChannel <- message
 
 }
