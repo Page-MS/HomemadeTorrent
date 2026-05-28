@@ -41,7 +41,7 @@ func Start(allSiteIDs []string, siteID string) {
 	processingChan := make(chan Event, 100)
 
 	// Delay Handling
-	delayHandler := delay.NewDelay();
+	delayHandler := delay.NewDelay()
 
 	// Init Controler et Registre
 	register := registre.Registre{}
@@ -56,9 +56,15 @@ func Start(allSiteIDs []string, siteID string) {
 	)
 
 	go listenStdEntry(eventQueue, &delayHandler)
-	go listenUserUIInput(eventQueue, siteID, controler, &register)
 	go listenLocalTorrentOutput(eventQueue, controler)
-	go siteLogic(processingChan, eventQueue, controler)
+	ui := webui.StartWebUI(siteID, controler.SiteIndex, func(msg string) {
+		eventQueue <- Event{
+			Type:   ReadMessage,
+			Source: FromLocalUser,
+			Data:   msg,
+		}
+	}, &register)
+	go siteLogic(processingChan, eventQueue, controler, ui.SendRegisterState)
 
 	log.Printf("[EVENT_LOOP] START\n")
 
@@ -97,7 +103,7 @@ func listenStdEntry(
 
 				log.Printf("[EVENT_LOOP] Message réseau lu en entrée: %s\n", msg)
 
-				delay.WaitNetworkDelay();
+				delay.WaitNetworkDelay()
 				queue <- Event{
 					Type:   ReadMessage,
 					Source: FromNetwork,
@@ -113,23 +119,6 @@ func listenStdEntry(
 	if err := scanner.Err(); err != nil {
 		log.Println("[EVENT_LOOP] Erreur de lecture Stdin:", err)
 	}
-}
-
-// interface web
-func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Controller, register *registre.Registre) {
-	onMsg := func(msg string) {
-		queue <- Event{
-			Type:   ReadMessage,
-			Source: FromLocalUser,
-			Data:   msg,
-		}
-	}
-	webui.StartWebUI(
-		siteID,
-		controler.SiteIndex,
-		onMsg,
-		register,
-	)
 }
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
@@ -159,7 +148,7 @@ func write(msg string) {
 	}
 }
 
-func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controller) {
+func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controller, onUpdate func()) {
 	for event := range input {
 		// Découpage par double saut de ligne pour séparer les messages collés
 		rawMessages := strings.Split(event.Data, "\n\n")
@@ -184,6 +173,10 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controlle
 					Data: r,
 				}
 			}
+		}
+
+		if onUpdate != nil {
+			onUpdate()
 		}
 	}
 }

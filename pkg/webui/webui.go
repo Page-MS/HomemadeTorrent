@@ -8,23 +8,57 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"sync"
+
+	"github.com/gorilla/websocket"
 )
 
 //go:embed static/*
 var staticFiles embed.FS
+
+type RegisterState struct {
+	SiteID string          `json:"SiteID"`
+	Files  []registre.File `json:"Files"`
+}
+
+type WSOutRegisterChanged struct {
+	Type string        `json:"type"`
+	Data RegisterState `json:"data"`
+}
+
+type WSInEnvelope struct {
+	Type string `json:"type"`
+}
+
+type WSInRefresh struct {
+	Type string `json:"type"`
+}
+
+type WSInAction struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
 
 type WebUI struct {
 	SiteID    string
 	Port      string
 	OnMessage func(string)
 	Register  *registre.Registre
+	clientMu  sync.Mutex // overkill
+	client    *websocket.Conn
 }
 
-func StartWebUI(siteID string, index int, onMessage func(string), register *registre.Registre) {
+var wsUpgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func StartWebUI(siteID string, index int, onMessage func(string), register *registre.Registre) *WebUI {
 	// Offset port by index so each site has a unique endpoint
 	port := fmt.Sprintf("808%d", index)
 
-	ui := WebUI{
+	ui := &WebUI{
 		SiteID:    siteID,
 		Port:      port,
 		OnMessage: onMessage,
@@ -35,12 +69,17 @@ func StartWebUI(siteID string, index int, onMessage func(string), register *regi
 	mux.HandleFunc("/", ui.handleHome)
 	mux.HandleFunc("/api/info", ui.handleInfo)
 	mux.HandleFunc("/api/send", ui.handleSendMessage)
+	mux.HandleFunc("/ws", ui.handleWS)
 
 	log.Printf("[WEBUI] Starting for %s on http://localhost:%s\n", siteID, port)
-	err := http.ListenAndServe(":"+port, mux)
-	if err != nil {
-		log.Printf("[WEBUI] Error starting HTTP server on %s : %v\n", port, err)
-	}
+	go func() {
+		err := http.ListenAndServe(":"+port, mux)
+		if err != nil {
+			log.Printf("[WEBUI] Error starting HTTP server on %s : %v\n", port, err)
+		}
+	}()
+
+	return ui
 }
 
 func (ui *WebUI) handleHome(w http.ResponseWriter, r *http.Request) {
@@ -78,22 +117,15 @@ func (ui *WebUI) handleHome(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ui *WebUI) handleInfo(w http.ResponseWriter, r *http.Request) {
+	state, err := ui.stateJSON()
+	if err != nil {
+		log.Printf("[WEBUI] Error building register state: %v\n", err)
+		http.Error(w, "Erreur serveur : impossible de charger l'interface", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-
-	var fileList []registre.File
-	if ui.Register != nil {
-		fileList = ui.Register.GetFileList()
-	}
-
-	data := struct {
-		SiteID string
-		Files  []registre.File
-	}{
-		SiteID: ui.SiteID,
-		Files:  fileList,
-	}
-
-	json.NewEncoder(w).Encode(data)
+	w.Write(state)
 }
 
 func (ui *WebUI) handleSendMessage(w http.ResponseWriter, r *http.Request) {
@@ -112,11 +144,134 @@ func (ui *WebUI) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[WEBUI] Message reçu depuis l'interface pour %s : %s\n", ui.SiteID, msg)
 
-	// Envoyer à l'event_loop
 	if ui.OnMessage != nil {
 		ui.OnMessage(msg)
 	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+}
+
+func (ui *WebUI) handleWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("[WEBUI] WebSocket upgrade failed: %v\n", err)
+		return
+	}
+	defer conn.Close()
+
+	ui.clientMu.Lock()
+	ui.client = conn
+	ui.clientMu.Unlock()
+	log.Printf("[WEBUI] Client connected for %s\n", ui.SiteID)
+
+	ui.SendRegisterState()
+
+	for {
+		_, msgData, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+
+		var envelope WSInEnvelope
+		err = json.Unmarshal(msgData, &envelope)
+		if err != nil {
+			log.Printf("[WEBUI] Failed to parse message type: %v\n", err)
+			continue
+		}
+
+		switch envelope.Type {
+		case "refresh":
+			var msg WSInRefresh
+			err = json.Unmarshal(msgData, &msg)
+			if err != nil {
+				log.Printf("[WEBUI] Failed to parse refresh message: %v\n", err)
+				continue
+			}
+			ui.handleRefresh(&msg)
+
+		case "action":
+			var msg WSInAction
+			err = json.Unmarshal(msgData, &msg)
+			if err != nil {
+				log.Printf("[WEBUI] Failed to parse action message: %v\n", err)
+				continue
+			}
+			ui.handleAction(&msg)
+
+		default:
+			log.Printf("[WEBUI] Unknown message type: %s\n", envelope.Type)
+		}
+	}
+
+	ui.clientMu.Lock()
+	ui.client = nil
+	ui.clientMu.Unlock()
+	log.Printf("[WEBUI] Client disconnected for %s\n", ui.SiteID)
+}
+
+// envoie l'état actuelle du registre au client connecté
+// méthode publique car doit pouvoir être appelée depuis l'eventloop
+func (ui *WebUI) SendRegisterState() {
+	ui.clientMu.Lock()
+	client := ui.client
+	ui.clientMu.Unlock()
+	if client == nil {
+		return
+	}
+
+	state := ui.registerState()
+
+	msg := WSOutRegisterChanged{
+		Type: "register-changed",
+		Data: state,
+	}
+	encoded, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("[WEBUI] Error encoding websocket message: %v\n", err)
+		return
+	}
+
+	if err := client.WriteMessage(websocket.TextMessage, encoded); err != nil {
+		log.Printf("[WEBUI] Error sending state: %v\n", err)
+		ui.clientMu.Lock()
+		ui.client = nil
+		ui.clientMu.Unlock()
+	}
+}
+
+func (ui *WebUI) handleRefresh(msg *WSInRefresh) {
+	log.Printf("[WEBUI] Client requested refresh\n")
+	ui.SendRegisterState()
+}
+
+func (ui *WebUI) handleAction(msg *WSInAction) {
+	if msg.Message == "" {
+		log.Printf("[WEBUI] Empty action message\n")
+		return
+	}
+	if len(msg.Message) > 50 {
+		log.Printf("[WEBUI] Action received: %s\n", msg.Message[:50])
+	} else {
+		log.Printf("[WEBUI] Action received: %s\n", msg.Message)
+	}
+	if ui.OnMessage != nil {
+		ui.OnMessage(msg.Message)
+	}
+}
+
+func (ui *WebUI) registerState() RegisterState {
+	var fileList []registre.File
+	if ui.Register != nil {
+		fileList = ui.Register.GetFileList()
+	}
+
+	return RegisterState{
+		SiteID: ui.SiteID,
+		Files:  fileList,
+	}
+}
+
+func (ui *WebUI) stateJSON() ([]byte, error) {
+	return json.Marshal(ui.registerState())
 }

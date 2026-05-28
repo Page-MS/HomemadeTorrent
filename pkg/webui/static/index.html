@@ -138,26 +138,85 @@
                 isLoading: false,
                 logs: [],
                 logCounter: 0,
-                updateInterval: null,
+                socket: null,
+                reconnectTimeout: null,
+                shouldReconnect: true,
 
                 async init() {
-                    await this.refreshFiles();
-                    this.updateInterval = setInterval(() => this.refreshFiles(), 10000);
+                    this.connectSocket();
                     this.addLog('UI initialized for {{.SiteID}}');
                 },
 
-                async refreshFiles() {
-                    this.isLoading = true;
-                    try {
-                        const response = await fetch('/api/info');
-                        if (!response.ok) throw new Error('Failed to fetch');
-                        const data = await response.json();
-                        this.files = data.Files || [];
-                    } catch (err) {
-                        console.error('Error refreshing files:', err);
-                        this.showStatus('Failed to load files', true);
+                connectSocket() {
+                    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+                        return;
                     }
-                    this.isLoading = false;
+
+                    this.isLoading = true;
+                    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+                    this.socket = new WebSocket(`${protocol}${window.location.host}/ws`);
+
+                    this.socket.onopen = () => {
+                        this.isLoading = false;
+                        this.addLog('WebSocket connected');
+                    };
+
+                    this.socket.onmessage = (event) => {
+                        try {
+                            const msg = JSON.parse(event.data);
+                            this.handleWSMessage(msg);
+                        } catch (err) {
+                            console.error('Error parsing websocket message:', err);
+                            this.showStatus('Invalid websocket payload', true);
+                        }
+                    };
+
+                    this.socket.onerror = () => {
+                        this.isLoading = false;
+                        this.showStatus('WebSocket error', true);
+                    };
+
+                    this.socket.onclose = () => {
+                        this.isLoading = false;
+                        this.addLog('WebSocket disconnected');
+                        if (!this.shouldReconnect) {
+                            return;
+                        }
+                        if (this.reconnectTimeout) {
+                            clearTimeout(this.reconnectTimeout);
+                        }
+                        this.reconnectTimeout = setTimeout(() => this.connectSocket(), 2000);
+                    };
+                },
+
+                handleWSMessage(msg) {
+                    switch (msg.type) {
+                        case 'register-changed':
+                            this.files = msg.data.Files || [];
+                            this.siteId = msg.data.SiteID || this.siteId;
+                            this.isLoading = false;
+                            break;
+                        default:
+                            console.log('Unknown event type:', msg.type);
+                    }
+                },
+
+                requestState() {
+                    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                        this.connectSocket();
+                        return;
+                    }
+
+                    try {
+                        this.socket.send(JSON.stringify({ type: 'refresh' }));
+                    } catch (err) {
+                        console.error('Error requesting state:', err);
+                        this.showStatus('Failed to request register state', true);
+                    }
+                },
+
+                async refreshFiles() {
+                    this.requestState();
                 },
 
                 hasLocalFile(file) {
@@ -169,22 +228,20 @@
                     
                     this.isSending = true;
                     try {
-                        const formData = new URLSearchParams();
-                        formData.append('message', msg);
-
-                        const response = await fetch('/api/send', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: formData
-                        });
-
-                        if (response.ok) {
-                            this.showStatus('Message sent successfully!', false);
-                            this.message = '';
-                            this.addLog('Message sent');
-                        } else {
-                            this.showStatus('Failed to send message: ' + response.statusText, true);
+                        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                            this.showStatus('Not connected', true);
+                            this.isSending = false;
+                            return;
                         }
+
+                        const wsMsg = {
+                            type: "action",
+                            message: msg
+                        };
+                        this.socket.send(JSON.stringify(wsMsg));
+                        this.showStatus('Message sent successfully!', false);
+                        this.message = '';
+                        this.addLog('Message sent');
                     } catch (err) {
                         console.error('Error sending message:', err);
                         this.showStatus('Network error while sending', true);
@@ -196,21 +253,19 @@
                 async sendHook(msg) {
                     this.isSending = true;
                     try {
-                        const formData = new URLSearchParams();
-                        formData.append('message', msg);
-
-                        const response = await fetch('/api/send', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: formData
-                        });
-
-                        if (response.ok) {
-                            this.showStatus('Hook sent successfully!', false);
-                            this.addLog('Hook sent');
-                        } else {
-                            this.showStatus('Failed to send hook', true);
+                        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                            this.showStatus('Not connected', true);
+                            this.isSending = false;
+                            return;
                         }
+
+                        const wsMsg = {
+                            type: "action",
+                            message: msg
+                        };
+                        this.socket.send(JSON.stringify(wsMsg));
+                        this.showStatus('Hook sent successfully!', false);
+                        this.addLog('Hook sent');
                     } catch (err) {
                         console.error('Error sending hook:', err);
                         this.showStatus('Network error', true);
@@ -248,8 +303,12 @@ ${payload}
                 },
 
                 destroy() {
-                    if (this.updateInterval) {
-                        clearInterval(this.updateInterval);
+                    this.shouldReconnect = false;
+                    if (this.reconnectTimeout) {
+                        clearTimeout(this.reconnectTimeout);
+                    }
+                    if (this.socket) {
+                        this.socket.close();
                     }
                 }
             };
