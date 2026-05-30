@@ -57,13 +57,13 @@ func Start(allSiteIDs []string, siteID string) {
 
 	go listenStdEntry(eventQueue, &delayHandler)
 	go listenLocalTorrentOutput(eventQueue, controler)
-	ui := webui.StartWebUI(siteID, controler.SiteIndex, func(msg string) {
+	ui := webui.StartWebUI(controler, func(msg string) {
 		eventQueue <- Event{
 			Type:   ReadMessage,
 			Source: FromLocalUser,
 			Data:   msg,
 		}
-	}, &register)
+	})
 	go siteLogic(processingChan, eventQueue, controler, ui.SendRegisterState)
 
 	log.Printf("[EVENT_LOOP] START\n")

@@ -6,34 +6,33 @@ import (
 )
 
 type Delay struct {
-	AppliationDelay_ms int
-	SnapshotDelay_ms int
-	NetworkDelay_ms int
+	AppliationDelay_ms int `json:"applicationDelay_ms"`
+	SnapshotDelay_ms   int `json:"snapshotDelay_ms"`
+	NetworkDelay_ms    int `json:"networkDelay_ms"`
 }
 
 // Default values for delay, wont get on the way on normal usage
 func NewDelay() Delay {
-	return Delay{};
+	return Delay{}
 }
 
 func Wait(duration_ms int) {
-	time.Sleep(time.Duration(duration_ms) * time.Millisecond);
+	time.Sleep(time.Duration(duration_ms) * time.Millisecond)
+}
+func (d *Delay) waitNamed(name string, duration_ms int) {
+	log.Printf("[DELAY] %s: waiting for %d ms\n", name, duration_ms)
+	time.Sleep(time.Duration(duration_ms) * time.Millisecond)
+	log.Printf("[DELAY] %s: finished waiting\n", name)
 }
 
 func (d *Delay) WaitApplicationDelay() {
-	log.Printf("[DELAY] Wait for abritrary delay of %d ms\n", d.AppliationDelay_ms);
-	time.Sleep(time.Duration(d.AppliationDelay_ms) * time.Millisecond);
-	log.Printf("[DELAY] Wait for abritrary delay\n");
+	d.waitNamed("ApplicationDelay", d.AppliationDelay_ms)
 }
 
 func (d *Delay) WaitSnapshotDelay() {
-	log.Printf("[DELAY] Wait for abritrary delay of %d ms\n", d.AppliationDelay_ms);
-	time.Sleep(time.Duration(d.SnapshotDelay_ms) * time.Millisecond);
-	log.Printf("[DELAY] Wait for abritrary delay\n");
+	d.waitNamed("SnapshotDelay", d.SnapshotDelay_ms)
 }
 
 func (d *Delay) WaitNetworkDelay() {
-	log.Printf("[DELAY] Wait for abritrary delay of %d ms\n", d.AppliationDelay_ms);
-	time.Sleep(time.Duration(d.NetworkDelay_ms) * time.Millisecond);
-	log.Printf("[DELAY] Wait for abritrary delay\n");
+	d.waitNamed("NetworkDelay", d.NetworkDelay_ms)
 }

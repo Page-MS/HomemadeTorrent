@@ -1,6 +1,8 @@
 package webui
 
 import (
+	"HomemadeTorrent/pkg/control"
+	"HomemadeTorrent/pkg/delay"
 	"HomemadeTorrent/pkg/registre"
 	"embed"
 	"encoding/json"
@@ -19,6 +21,7 @@ var staticFiles embed.FS
 type RegisterState struct {
 	SiteID string          `json:"SiteID"`
 	Files  []registre.File `json:"Files"`
+	Delay  *delay.Delay    `json:"Delay"`
 }
 
 type WSOutRegisterChanged struct {
@@ -39,11 +42,16 @@ type WSInAction struct {
 	Message string `json:"message"`
 }
 
+type WSInUpdateDelay struct {
+	Type  string      `json:"type"`
+	Delay delay.Delay `json:"delay"`
+}
+
 type WebUI struct {
 	SiteID    string
 	Port      string
 	OnMessage func(string)
-	Register  *registre.Registre
+	controler *control.Controller
 	clientMu  sync.Mutex // overkill
 	client    *websocket.Conn
 }
@@ -54,15 +62,18 @@ var wsUpgrader = websocket.Upgrader{
 	},
 }
 
-func StartWebUI(siteID string, index int, onMessage func(string), register *registre.Registre) *WebUI {
+func StartWebUI(
+	c *control.Controller,
+	onMessage func(string),
+) *WebUI {
 	// Offset port by index so each site has a unique endpoint
-	port := fmt.Sprintf("808%d", index)
+	port := fmt.Sprintf("808%d", c.SiteIndex)
 
 	ui := &WebUI{
-		SiteID:    siteID,
+		SiteID:    c.SiteID,
 		Port:      port,
 		OnMessage: onMessage,
-		Register:  register,
+		controler: c,
 	}
 
 	mux := http.NewServeMux()
@@ -71,7 +82,7 @@ func StartWebUI(siteID string, index int, onMessage func(string), register *regi
 	mux.HandleFunc("/api/send", ui.handleSendMessage)
 	mux.HandleFunc("/ws", ui.handleWS)
 
-	log.Printf("[WEBUI] Starting for %s on http://localhost:%s\n", siteID, port)
+	log.Printf("[WEBUI] Starting for %s on http://localhost:%s\n", ui.SiteID, port)
 	go func() {
 		err := http.ListenAndServe(":"+port, mux)
 		if err != nil {
@@ -199,6 +210,15 @@ func (ui *WebUI) handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			ui.handleAction(&msg)
 
+		case "update-delay":
+			var msg WSInUpdateDelay
+			err = json.Unmarshal(msgData, &msg)
+			if err != nil {
+				log.Printf("[WEBUI] Failed to parse update delay message: %v\n", err)
+				continue
+			}
+			ui.handleUpdateDelay(&msg)
+
 		default:
 			log.Printf("[WEBUI] Unknown message type: %s\n", envelope.Type)
 		}
@@ -260,15 +280,21 @@ func (ui *WebUI) handleAction(msg *WSInAction) {
 	}
 }
 
+func (ui *WebUI) handleUpdateDelay(msg *WSInUpdateDelay) {
+	log.Printf("[WEBUI] Update delay received: %v\n", msg.Delay)
+	ui.controler.UpdateDelay(msg.Delay)
+}
+
 func (ui *WebUI) registerState() RegisterState {
 	var fileList []registre.File
-	if ui.Register != nil {
-		fileList = ui.Register.GetFileList()
+	if ui.controler.Reg != nil {
+		fileList = ui.controler.Reg.GetFileList()
 	}
 
 	return RegisterState{
 		SiteID: ui.SiteID,
 		Files:  fileList,
+		Delay:  ui.controler.Delay,
 	}
 }
 

@@ -91,6 +91,29 @@
                     </button>
                 </form>
 
+                <!-- Delay config -->
+                <h2 class="text-lg mt-4 border-b border-dashed border-stone-300 pb-1 mb-3">
+                    Configure Delays
+                </h2>
+                <div class="flex flex-col space-y-2">
+                    <label for="">
+                        <span>Application Delay (ms):</span>
+                    </label>
+                    <input type="number" x-model="delay.applicationDelay_ms" class="border border-stone-400 p-2">
+                    <label for="">
+                        <span>Snapshot Delay (ms):</span>
+                    </label>
+                    <input type="number" x-model="delay.snapshotDelay_ms" class="border border-stone-400 p-2">
+                    <label for="">
+                        <span>Network Delay (ms):</span>
+                    </label>
+                    <input type="number" x-model="delay.networkDelay_ms" class="border border-stone-400 p-2">
+                    <button @click="updateDelay()"
+                            class="bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
+                        Update Delays
+                    </button>
+                </div>
+
                 <!-- Status Messages -->
                 <template x-if="statusMessage">
                     <div :class="'mt-3 p-2 border font-bold text-sm ' + (statusIsError ? 'border-red-600 bg-red-50 text-red-700' : 'border-green-600 bg-green-50 text-green-700')"
@@ -141,6 +164,11 @@
                 socket: null,
                 reconnectTimeout: null,
                 shouldReconnect: true,
+                delay: {
+                    applicationDelay_ms: 0,
+                    snapshotDelay_ms: 0,
+                    networkDelay_ms: 0
+                },
 
                 async init() {
                     this.connectSocket();
@@ -195,6 +223,12 @@
                             this.files = msg.data.Files || [];
                             this.siteId = msg.data.SiteID || this.siteId;
                             this.isLoading = false;
+                            this.delay = {
+                                applicationDelay_ms: msg.data.Delay?.applicationDelay_ms || 0,
+                                snapshotDelay_ms: msg.data.Delay?.snapshotDelay_ms || 0,
+                                networkDelay_ms: msg.data.Delay?.networkDelay_ms || 0
+                            };
+                            this.addLog('Register updated');
                             break;
                         default:
                             console.log('Unknown event type:', msg.type);
@@ -282,6 +316,18 @@ PAYLOAD_LEN:${payload.length}
 ${payload}
 `;
                     await this.sendMessage(msg);
+                },
+
+                async updateDelay() {
+                    this.socket.send(JSON.stringify({
+                        type: "update-delay",
+                        delay: {
+                            applicationDelay_ms: parseInt(this.delay.applicationDelay_ms) || -1,
+                            snapshotDelay_ms: parseInt(this.delay.snapshotDelay_ms) || -1,
+                            networkDelay_ms: parseInt(this.delay.networkDelay_ms) || -1
+                        }
+                    }));
+                    this.showStatus('Delay updated', false);
                 },
 
                 showStatus(msg, isError) {
