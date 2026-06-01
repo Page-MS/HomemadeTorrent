@@ -31,15 +31,10 @@ go.work.sum
 # .idea/
 # .vscode/
 
-/bin/parts
-
-/bin/Page
-/bin/Mathy
-/bin/Alexis
-/bin/Noah
-/bin/1
-/bin/2
-/bin/3
+# Images et parts sauf celles de départ
+/bin/*
+!/bin/baseFiles
+!/bin/baseFiles/**
 
 # Logs files
 *.log

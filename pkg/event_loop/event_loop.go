@@ -2,6 +2,7 @@ package event_loop
 
 import (
 	"HomemadeTorrent/pkg/control"
+	networkcontroler "HomemadeTorrent/pkg/network_controler"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
 	"HomemadeTorrent/pkg/webui"
@@ -35,6 +36,10 @@ type Event struct {
 }
 
 func Start(allSiteIDs []string, siteID string) {
+	// Debug
+	dir, _ := os.Getwd()
+	log.Printf("working dir: %s", dir)
+
 	// Channels
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
@@ -44,12 +49,14 @@ func Start(allSiteIDs []string, siteID string) {
 	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
 	registre.InitialiseRegistre(siteID, &register)
 
-	controler := control.NewController(siteID, allSiteIDs, &register)
+	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register)
+
+	log.Printf("SiteID: %s, Index: %d, All sites: %s\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs)
 
 	go listenStdEntry(eventQueue)
-	go listenUserUIInput(eventQueue, siteID, controler, &register)
-	go listenLocalTorrentOutput(eventQueue, controler)
-	go siteLogic(processingChan, eventQueue, controler)
+	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register)
+	go listenLocalTorrentOutput(eventQueue, networkControler.Controler)
+	go siteLogic(processingChan, eventQueue, networkControler)
 
 	log.Printf("[EVENT_LOOP] START\n")
 
@@ -141,7 +148,7 @@ func write(msg string) {
 	}
 }
 
-func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controller) {
+func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler.NetworkControler) {
 	for event := range input {
 		// Découpage par double saut de ligne pour séparer les messages collés
 		rawMessages := strings.Split(event.Data, "\n\n")
@@ -155,9 +162,9 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controlle
 			var responses []string
 			switch event.Source {
 			case FromNetwork:
-				responses = c.HandleIncomingFromNetwork(cleanRaw)
+				responses = nc.HandleIncomingFromNetwork(cleanRaw)
 			case FromLocalUser:
-				responses = c.HandleIncomingFromLocal(cleanRaw)
+				responses = nc.HandleIncomingFromLocal(cleanRaw)
 			}
 
 			for _, r := range responses {

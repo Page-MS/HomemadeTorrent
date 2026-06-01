@@ -452,37 +452,25 @@ func (r *Registre) CheckIfWeHavePartInOurStorage(currentSiteID string, fileID st
 // - sourcePath: the path to the directory containing the source files
 // - destinationPath: the path to the directory where the file parts will be stored
 func MakeInitialHardcodedRegister(registre *Registre, sourcePath string, destinationPath string, allSiteIDs []string) {
-	//peersList := []string{"Mathy", "Alexis", "Noah", "Page"}
-	peersList := allSiteIDs
-	registre.Peers = peersList
+	registre.Peers = allSiteIDs
 	registre.PutAllFilesFromDirectoryInRegister(sourcePath, destinationPath)
-	//CleanUpPartsDirectory()
-	// We decide very arbitrary which peers have which files at the begining of the execution of the program
-	// TODO: make this more dynamic and less hardcoded
-	for i := range registre.GetFileList() {
-		if i%4 == 0 {
-			registre.Files[i].PeersThatHaveFileID = []string{"1", "2"}
-			for part := range registre.Files[i].FileParts {
-				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"1", "2"}
-			}
-		} else if i%4 == 1 {
-			registre.Files[i].PeersThatHaveFileID = []string{"3", "1"}
-			for part := range registre.Files[i].FileParts {
-				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"3", "1"}
-			}
-		} else if i%4 == 2 {
-			registre.Files[i].PeersThatHaveFileID = []string{"1", "3"}
-			for part := range registre.Files[i].FileParts {
-				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"1", "3"}
-			}
-		} else {
-			registre.Files[i].PeersThatHaveFileID = []string{"2", "1"}
-			for part := range registre.Files[i].FileParts {
-				registre.Files[i].FileParts[part].PeersThatHaveFilePartID = []string{"2", "1"}
-			}
-		}
+
+	n := len(allSiteIDs)
+	if n == 0 {
+		return
 	}
 
+	for i := range registre.GetFileList() {
+		// Deux pairs consécutifs (modulo n) possèdent chaque fichier
+		owner1 := allSiteIDs[i%n]
+		owner2 := allSiteIDs[(i+1)%n]
+		owners := []string{owner1, owner2}
+
+		registre.Files[i].PeersThatHaveFileID = owners
+		for part := range registre.Files[i].FileParts {
+			registre.Files[i].FileParts[part].PeersThatHaveFilePartID = owners
+		}
+	}
 }
 
 // Takes the siteID and intialize the files that the file should have at the beginning of the execution of the program based on the precreated common register

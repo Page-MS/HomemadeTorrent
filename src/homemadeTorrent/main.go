@@ -18,8 +18,6 @@ func main() {
 	siteID := args[0]
 	allSiteIDs := args[1:]
 
-	//log.Printf("Shasum: %s\n", registre.CalculateShasum("../../bin/baseFiles/decoyduck.png"))
-
 	// Lancement boucle
 	event_loop.Start(allSiteIDs, siteID)
 }
