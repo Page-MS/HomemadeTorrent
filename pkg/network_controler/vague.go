@@ -3,12 +3,14 @@ package networkcontroler
 import (
 	"HomemadeTorrent/pkg/parser"
 	"log"
+	"strings"
 )
 
 // Actions utilisées pour la diffusion en vague
 const (
-	VAGUE       = "Vague"
-	RETOURVAGUE = "RetourVague"
+	WAVE        = "WAVE"
+	RETURN_WAVE = "RETURN_WAVE"
+	START_WAVE  = "START_WAVE"
 )
 
 // WaveState contient l'état local de l'algorithme de vague pour une vague donnée.
@@ -21,7 +23,7 @@ type WaveState struct {
 }
 
 // InitWave est appelé quand CE site veut démarrer une nouvelle vague.
-// Retourne les messages Vague à envoyer en broadcast vers tous les voisins.
+// Retourne le message Vague à envoyer en broadcast vers tous les voisins.
 func (nc *NetworkControler) InitWave(waveID string) string {
 	_, exists := nc.Waves[waveID]
 	if exists {
@@ -40,7 +42,7 @@ func (nc *NetworkControler) InitWave(waveID string) string {
 
 	log.Printf("[WAVE] Site %s initie la vague %s vers %d voisins\n", nc.SiteID, waveID, state.EchoPending)
 
-	return nc.buildWaveMessages(waveID, nc.SiteID)
+	return nc.buildWaveMessages(waveID, nc.SiteID, state.Parent)
 }
 
 // HandleWave est appelé quand on reçoit un message d'action WAVE.
@@ -48,9 +50,11 @@ func (nc *NetworkControler) InitWave(waveID string) string {
 //   - le message à réémettre (nouveau WAVE vers les voisins, ou ECHO vers le parent)
 //   - un booléen indiquant si ce site traite la vague pour la première fois
 func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
-	waveID := pMsg.Id
 	sender := pMsg.Sender
-	initiator := pMsg.Payload
+	parts := strings.Split(pMsg.Payload, ",")
+	initiator := parts[0]
+	parent := parts[1]
+	waveID := parts[2]
 
 	state, exists := nc.Waves[waveID]
 	if !exists {
@@ -75,7 +79,11 @@ func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
 		}
 
 		// Propager la Wave à tous les voisins
-		return nc.buildWaveMessages(waveID, initiator), true
+		return nc.buildWaveMessages(waveID, initiator, state.Parent), true
+	} else if parent == nc.SiteID {
+		// Mon descendant me repropage ma vague
+		log.Printf("[WAVE] Propagation vague venant du descendant %s, ignoré\n", pMsg.Sender)
+		return "", false
 	}
 
 	// On a déjà vu cette vague : un de mes voisins a reçut la vague autrement que part moi
@@ -90,9 +98,9 @@ func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
 }
 
 // HandleEcho est appelé quand on reçoit un message d'action ECHO.
-// Retourne les messages à envoyer (écho vers le parent, ou signal de fin si initiateur).
+// Retourne le message à envoyer (écho vers le parent, ou signal de fin si initiateur).
 func (nc *NetworkControler) HandleEcho(pMsg parser.Message) (string, bool) {
-	waveID := pMsg.Id
+	waveID := pMsg.Payload
 
 	state, exists := nc.Waves[waveID]
 	if !exists {
@@ -135,13 +143,12 @@ func (nc *NetworkControler) onWaveComplete(waveID string) {
 
 // ─── Helpers de construction de messages ─────────────────────────────────────
 
-func (nc *NetworkControler) buildWaveMessages(waveID string, initiator string) string {
+func (nc *NetworkControler) buildWaveMessages(waveID string, initiator string, parent string) string {
 	msg := parser.Message{
-		Id:      waveID,
 		Sender:  nc.SiteID,
 		Dest:    BROADCAST,
-		Action:  VAGUE,
-		Payload: initiator,
+		Action:  WAVE,
+		Payload: initiator + "," + parent + "," + waveID,
 	}
 	encoded, err := parser.Encode(msg)
 	if err != nil {
@@ -152,12 +159,11 @@ func (nc *NetworkControler) buildWaveMessages(waveID string, initiator string) s
 }
 
 func (nc *NetworkControler) buildEchoMessages(waveID string, parent string) string {
-
 	msg := parser.Message{
-		Id:     waveID,
-		Sender: nc.SiteID,
-		Dest:   parent,
-		Action: RETOURVAGUE,
+		Sender:  nc.SiteID,
+		Dest:    parent,
+		Action:  RETURN_WAVE,
+		Payload: waveID,
 	}
 	encoded, err := parser.Encode(msg)
 	if err != nil {
