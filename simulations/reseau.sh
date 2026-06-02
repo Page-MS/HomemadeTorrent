@@ -5,16 +5,16 @@ PROJECT_DIR="../src/homemadeTorrent"
 BIN_DIR="../bin"
 FIFO_DIR="/tmp/network_fifos"
 
-# Nettoyage
+# Nettoyage et setup des dossiers
 mkdir -p "$LOG_DIR"
 mkdir -p "$FIFO_DIR"
 rm -f "$FIFO_DIR"/in* "$FIFO_DIR"/out*
-
 find "$BIN_DIR" -mindepth 1 -not -path "$BIN_DIR/baseFiles*" -exec rm -rf {} + 2>/dev/null
 
-# Liste des noeuds
+# Liste des noeuds et du nombre de voisins
 NODES="node1 node2 node3 node4 node5 node6 node7"
 IDS="$NODES"
+DEGREES="2 3 2 3 2 2 2"
 
 # Création des named pipes
 for node in $NODES; do
@@ -22,12 +22,13 @@ for node in $NODES; do
     mkfifo "$FIFO_DIR/out_$node"
 done
 
+# ============ LANCEMENT ===================
+
 echo "Logs dirigés vers : $LOG_DIR"
 
 # Lancement des noeuds
-# Lancement des nœuds
 for node in $NODES; do
-    go run -C "$PROJECT_DIR" . "$node" $IDS \
+    go run -C "$PROJECT_DIR" . "$node" "$DEGREES" $IDS \
         < "$FIFO_DIR/in_$node" \
         > "$FIFO_DIR/out_$node" \
         2> "$LOG_DIR/$node.log" &

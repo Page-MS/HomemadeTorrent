@@ -7,17 +7,30 @@ import (
 	"log"
 )
 
+const BROADCAST = control.BROADCAST
+
 type NetworkControler struct {
 	Controler    *control.Controller
 	SeenMessages map[string]bool // Messages déjà vu par le site
 	SiteID       string
+	nbNeighbors  map[string]int
+	Waves        map[string]*WaveState
 }
 
-func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre) *NetworkControler {
+func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors []int) *NetworkControler {
+	neighborsMap := make(map[string]int)
+	for i, id := range allSiteIDs {
+		neighborsMap[id] = nbNeighbors[i]
+	}
+
+	log.Printf("neighborsMap = %+v", neighborsMap)
+
 	return &NetworkControler{
 		Controler:    control.NewController(siteID, allSiteIDs, r),
 		SeenMessages: make(map[string]bool),
 		SiteID:       siteID,
+		nbNeighbors:  neighborsMap,
+		Waves:        make(map[string]*WaveState),
 	}
 }
 
@@ -31,8 +44,7 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		return responses
 	}
 
-	// ================ Routage anneau ====================
-	// TODO: comprendre pourquoi ca ne marche pas
+	// ================ Routage ====================
 	if nc.SeenMessages[pMsg.Id] {
 		log.Printf("[NETWORK CONTROLER] Message déjà vu, ignoré\n")
 		return nil
@@ -50,11 +62,21 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 	// ============= Logique Network Controler =============
 	// Si le message concerne le reseau
 	// TODO: vague, arrivé, depart
+	switch pMsg.Action {
+	case VAGUE:
+		msg, _ := nc.HandleWave(pMsg)
+		responses = append(responses, msg)
 
-	// Si le message ne nous concerne pas (le default du switch)
-	controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
+	case RETOURVAGUE:
+		msg, _ := nc.HandleEcho(pMsg)
+		responses = append(responses, msg)
+	default:
+		// Si le message ne nous concerne pas
+		controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
+		responses = append(responses, controlerResponse...)
+	}
 
-	return append(responses, controlerResponse...)
+	return responses
 }
 
 func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
