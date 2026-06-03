@@ -183,7 +183,8 @@ func (c *Controller) finalizeSnapshot() parser.Message {
 		Sender: c.SiteID,
 		Stamp:  c.Lamport.GetValue(),
 		Vect:   c.Vector.GetCopy(),
-		Dest:   c.getIdFromSIteIndex(c.getSuccessorIndex()),
+		//Dest:   c.getIdFromSIteIndex(c.getSuccessorIndex())
+		Dest: BROADCAST,
 	}
 	log.Println("[SNAPSHOT] Système prêt pour une nouvelle sauvegarde.")
 	return resetMsg
