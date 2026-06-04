@@ -25,12 +25,20 @@ done
 echo "Logs dirigés vers : $LOG_DIR"
 
 # Lancement des noeuds
-# Lancement des nœuds
+# Lancement des nœuds non bootstrap
 for node in $NODES; do
+if [ "$node" != "node7" ]; then
     go run -C "$PROJECT_DIR" . "$node" 0 $IDS \
         < "$FIFO_DIR/in_$node" \
         > "$FIFO_DIR/out_$node" \
         2> "$LOG_DIR/$node.log" &
+else
+    # Lancement du nœud bootstrap, il ne cnnait pas la liste des autres nœuds
+    go run -C "$PROJECT_DIR" . "$node" 1 \
+        < "$FIFO_DIR/in_$node" \
+        > "$FIFO_DIR/out_$node" \
+        2> "$LOG_DIR/$node.log" &
+fi
 done
 
 # Délai pour laisser les noeuds démarrer
@@ -49,8 +57,8 @@ cat "$FIFO_DIR/out_node4" | tee "$FIFO_DIR/in_node2" "$FIFO_DIR/in_node5" "$FIFO
 cat "$FIFO_DIR/out_node5" | tee "$FIFO_DIR/in_node2" "$FIFO_DIR/in_node4" > /dev/null &
 # 6 -> 3, 7
 cat "$FIFO_DIR/out_node6" | tee "$FIFO_DIR/in_node3" "$FIFO_DIR/in_node7" > /dev/null &
-# 7 -> 4, 6
-cat "$FIFO_DIR/out_node7" | tee "$FIFO_DIR/in_node4" "$FIFO_DIR/in_node6" > /dev/null &
+# 7 -> 4 Is gonna bootstrap the network
+cat "$FIFO_DIR/out_node7" | tee "$FIFO_DIR/in_node4" > /dev/null &
 
 echo "Réseau démarré. Ctrl+C pour arrêter."
 

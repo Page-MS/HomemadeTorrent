@@ -30,7 +30,7 @@ func main() {
 	// Lancement boucle
 	if bootstrap == "1" {
 		log.Printf("Bootstrap pour le site %s\n", siteID)
-		event_loop.StartBootstrap(allSiteIDs, siteID)
+		event_loop.StartBootstrap(siteID)
 	} else {
 		event_loop.Start(allSiteIDs, siteID)
 

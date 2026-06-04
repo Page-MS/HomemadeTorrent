@@ -35,8 +35,10 @@ type Event struct {
 	Data   string
 }
 
-func StartBootstrap(allSiteIDs []string, siteID string) {
-	Start(allSiteIDs, siteID)
+func StartBootstrap(siteID string) {
+	// We contact the bootstrap node which we have the access to the fifo
+	write("BOOTSTRAP " + siteID)
+	//Start(allSiteIDs, siteID)
 }
 
 func Start(allSiteIDs []string, siteID string) {
