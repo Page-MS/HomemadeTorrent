@@ -27,7 +27,7 @@ echo "Logs dirigés vers : $LOG_DIR"
 # Lancement des noeuds
 # Lancement des nœuds
 for node in $NODES; do
-    go run -C "$PROJECT_DIR" . "$node" $IDS \
+    go run -C "$PROJECT_DIR" . "$node" 0 $IDS \
         < "$FIFO_DIR/in_$node" \
         > "$FIFO_DIR/out_$node" \
         2> "$LOG_DIR/$node.log" &

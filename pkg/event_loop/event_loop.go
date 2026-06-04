@@ -35,6 +35,10 @@ type Event struct {
 	Data   string
 }
 
+func StartBootstrap(allSiteIDs []string, siteID string) {
+	Start(allSiteIDs, siteID)
+}
+
 func Start(allSiteIDs []string, siteID string) {
 	// Debug
 	dir, _ := os.Getwd()
