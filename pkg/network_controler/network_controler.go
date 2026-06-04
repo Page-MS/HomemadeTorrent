@@ -5,19 +5,32 @@ import (
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
 	"log"
+
+	"github.com/google/uuid"
 )
+
+const BROADCAST = control.BROADCAST
 
 type NetworkControler struct {
 	Controler    *control.Controller
 	SeenMessages map[string]bool // Messages déjà vu par le site
 	SiteID       string
+	nbNeighbors  map[string]int
+	Waves        map[string]*WaveState
 }
 
-func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre) *NetworkControler {
+func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors []int) *NetworkControler {
+	neighborsMap := make(map[string]int)
+	for i, id := range allSiteIDs {
+		neighborsMap[id] = nbNeighbors[i]
+	}
+
 	return &NetworkControler{
 		Controler:    control.NewController(siteID, allSiteIDs, r),
 		SeenMessages: make(map[string]bool),
 		SiteID:       siteID,
+		nbNeighbors:  neighborsMap,
+		Waves:        make(map[string]*WaveState),
 	}
 }
 
@@ -31,8 +44,7 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		return responses
 	}
 
-	// ================ Routage anneau ====================
-	// TODO: comprendre pourquoi ca ne marche pas
+	// ================ Routage ====================
 	if nc.SeenMessages[pMsg.Id] {
 		log.Printf("[NETWORK CONTROLER] Message déjà vu, ignoré\n")
 		return nil
@@ -50,16 +62,45 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 	// ============= Logique Network Controler =============
 	// Si le message concerne le reseau
 	// TODO: vague, arrivé, depart
+	switch pMsg.Action {
+	case WAVE:
+		msg, _ := nc.HandleWave(pMsg)
+		responses = append(responses, msg)
 
-	// Si le message ne nous concerne pas (le default du switch)
-	controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
+	case RETURN_WAVE:
+		msg, _ := nc.HandleEcho(pMsg)
+		responses = append(responses, msg)
+	default:
+		// Si le message ne nous concerne pas
+		controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
+		responses = append(responses, controlerResponse...)
+	}
 
-	return append(responses, controlerResponse...)
+	return responses
 }
 
 func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
-	// Le message ne nous concerne forcement pas
-	return nc.Controler.HandleIncomingFromLocal(raw)
+	var responses []string
+
+	// ============= Decodage str -> struct ===============
+	pMsg, err := parser.Decode(raw)
+	if err != nil {
+		log.Printf("[NETWORK CONTROLLER][NETWORK] Erreur decodage: %v\n", err)
+		return responses
+	}
+
+	// ============= Logique Network Controler =============
+	switch pMsg.Action {
+	case START_WAVE:
+		msg := nc.InitWave(uuid.NewString())
+		responses = append(responses, msg)
+	default:
+		// Si le message ne nous concerne pas
+		controlerResponse := nc.Controler.HandleIncomingFromLocal(raw)
+		responses = append(responses, controlerResponse...)
+	}
+
+	return responses
 }
 
 // routeMessage gère le routage
@@ -76,6 +117,11 @@ func (nc *NetworkControler) routeMessage(pMsg parser.Message) (processLocal bool
 
 	// Broadcast : traiter ET re-émettre
 	if pMsg.Dest == control.BROADCAST {
+		// Exeception si c'est une propagation vague : on intercepte le broadcast
+		if pMsg.Action == WAVE {
+			log.Printf("[ROUTAGE] Broadcast vague reçu sur site %s, pas de propagation\n", nc.SiteID)
+			return true, false
+		}
 		log.Printf("[ROUTAGE] Broadcast reçu sur site %s\n", nc.SiteID)
 		return true, true
 	}
