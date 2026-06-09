@@ -35,7 +35,7 @@ func (nc *NetworkControler) InitWave(waveID string) string {
 		WaveID:      waveID,
 		Initiator:   nc.SiteID,
 		Parent:      "", // pas de parent : on est l'initiateur
-		EchoPending: nc.nbNeighbors[nc.SiteID],
+		EchoPending: nc.NbNeighbors,
 		Done:        false,
 	}
 	nc.Waves[waveID] = state
@@ -67,7 +67,7 @@ func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
 		}
 
 		// On attend les échos de tous les voisins sauf le parent
-		state.EchoPending = nc.nbNeighbors[nc.SiteID] - 1
+		state.EchoPending = nc.NbNeighbors - 1
 		nc.Waves[waveID] = state
 
 		log.Printf("[WAVE] Site %s reçoit vague %s pour la première fois (parent=%s, pending=%d)\n", nc.SiteID, waveID, sender, state.EchoPending)
@@ -75,6 +75,7 @@ func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
 		// Cas feuille : aucun voisin à qui propager → écho immédiat
 		if state.EchoPending == 0 {
 			log.Printf("[WAVE] Site %s est une feuille, écho immédiat vers %s\n", nc.SiteID, sender)
+			delete(nc.Waves, waveID)
 			return nc.buildEchoMessages(waveID, sender), true
 		}
 
@@ -92,6 +93,7 @@ func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
 	// Si aucun voisin à qui propager → écho
 	if state.EchoPending == 0 {
 		log.Printf("[WAVE] Site %s n'a plus de voisins à qui propager, écho vers %s\n", nc.SiteID, state.Parent)
+		delete(nc.Waves, waveID)
 		return nc.buildEchoMessages(waveID, state.Parent), false
 	}
 	return "", false
@@ -126,6 +128,7 @@ func (nc *NetworkControler) HandleEcho(pMsg parser.Message) (string, bool) {
 	if state.Parent == "" {
 		// On est l'initiateur : la vague est terminée globalement
 		log.Printf("[ECHO] Site %s (initiateur) : vague %s TERMINÉE\n", nc.SiteID, waveID)
+		delete(nc.Waves, waveID)
 		nc.onWaveComplete(waveID)
 		return "", true
 	}

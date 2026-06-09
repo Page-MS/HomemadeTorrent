@@ -57,7 +57,7 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
 
 	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors)
 
-	log.Printf("SiteID: %s, Index: %d, All sites: %s\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs)
+	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors)
 
 	go listenStdEntry(eventQueue)
 	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register)

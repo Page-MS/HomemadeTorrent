@@ -21,7 +21,7 @@ func main() {
 	siteID := args[0]
 	nbNeighborsStr := args[1]
 	bootstrap := args[2]
-	allSiteIDs := args[3:]
+	allSiteIDs := args[2:]
 
 	nbNeighbors, _ := strconv.Atoi(nbNeighborsStr)
 

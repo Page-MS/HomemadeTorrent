@@ -27,12 +27,14 @@ done
 echo "Logs dirigés vers : $LOG_DIR"
 
 # Lancement des noeuds
+i=1
 for node in $NODES; do
-    go run -C "$PROJECT_DIR" . "$node" "$DEGREES" $IDS \
+    degree=$(echo "$DEGREES" | cut -d' ' -f$i)
+    go run -C "$PROJECT_DIR" . "$node" "$degree" $IDS \
         < "$FIFO_DIR/in_$node" \
         > "$FIFO_DIR/out_$node" \
         2> "$LOG_DIR/$node.log" &
-fi
+    i=$((i + 1))
 done
 
 # Délai pour laisser les noeuds démarrer
