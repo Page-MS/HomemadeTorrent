@@ -114,6 +114,10 @@
                             class="block bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
                         [ START Vague ]
                     </button>
+                     <button @click="sendHook('ACTION:START_ELECTION\nDEST:{{.SiteID}}\n\n')"
+                            class="block bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
+                        [ START Election ]
+                    </button>
                 </div>
             </div>
 

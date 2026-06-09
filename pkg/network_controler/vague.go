@@ -48,8 +48,7 @@ func (nc *NetworkControler) InitWave(waveID string) string {
 // HandleWave est appelé quand on reçoit un message d'action WAVE.
 // Retourne :
 //   - le message à réémettre (nouveau WAVE vers les voisins, ou ECHO vers le parent)
-//   - un booléen indiquant si ce site traite la vague pour la première fois
-func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
+func (nc *NetworkControler) HandleWave(pMsg parser.Message) string {
 	sender := pMsg.Sender
 	parts := strings.Split(pMsg.Payload, ",")
 	initiator := parts[0]
@@ -76,15 +75,16 @@ func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
 		if state.EchoPending == 0 {
 			log.Printf("[WAVE] Site %s est une feuille, écho immédiat vers %s\n", nc.SiteID, sender)
 			delete(nc.Waves, waveID)
-			return nc.buildEchoMessages(waveID, sender), true
+			return nc.buildEchoMessages(waveID, sender)
 		}
 
 		// Propager la Wave à tous les voisins
-		return nc.buildWaveMessages(waveID, initiator, state.Parent), true
+		return nc.buildWaveMessages(waveID, initiator, state.Parent)
+
 	} else if parent == nc.SiteID {
 		// Mon descendant me repropage ma vague
 		log.Printf("[WAVE] Propagation vague venant du descendant %s, ignoré\n", pMsg.Sender)
-		return "", false
+		return ""
 	}
 
 	// On a déjà vu cette vague : un de mes voisins a reçut la vague autrement que part moi
@@ -94,24 +94,24 @@ func (nc *NetworkControler) HandleWave(pMsg parser.Message) (string, bool) {
 	if state.EchoPending == 0 {
 		log.Printf("[WAVE] Site %s n'a plus de voisins à qui propager, écho vers %s\n", nc.SiteID, state.Parent)
 		delete(nc.Waves, waveID)
-		return nc.buildEchoMessages(waveID, state.Parent), false
+		return nc.buildEchoMessages(waveID, state.Parent)
 	}
-	return "", false
+	return ""
 }
 
 // HandleEcho est appelé quand on reçoit un message d'action ECHO.
 // Retourne le message à envoyer (écho vers le parent, ou signal de fin si initiateur).
-func (nc *NetworkControler) HandleEcho(pMsg parser.Message) (string, bool) {
+func (nc *NetworkControler) HandleEcho(pMsg parser.Message) string {
 	waveID := pMsg.Payload
 
 	state, exists := nc.Waves[waveID]
 	if !exists {
 		log.Printf("[ECHO] Reçu écho pour vague inconnue %s, ignoré\n", waveID)
-		return "", false
+		return ""
 	}
 	if state.Done {
 		log.Printf("[ECHO] Vague %s déjà terminée, écho ignoré\n", waveID)
-		return "", false
+		return ""
 	}
 
 	state.EchoPending -= 1
@@ -119,7 +119,7 @@ func (nc *NetworkControler) HandleEcho(pMsg parser.Message) (string, bool) {
 
 	if state.EchoPending > 0 {
 		// On attend encore d'autres échos
-		return "", false
+		return ""
 	}
 
 	// Tous les échos reçus
@@ -130,12 +130,12 @@ func (nc *NetworkControler) HandleEcho(pMsg parser.Message) (string, bool) {
 		log.Printf("[ECHO] Site %s (initiateur) : vague %s TERMINÉE\n", nc.SiteID, waveID)
 		delete(nc.Waves, waveID)
 		nc.onWaveComplete(waveID)
-		return "", true
+		return ""
 	}
 
 	// On renvoie l'écho à notre parent
 	log.Printf("[ECHO] Site %s renvoie écho vers parent %s pour vague %s\n", nc.SiteID, state.Parent, waveID)
-	return nc.buildEchoMessages(waveID, state.Parent), false
+	return nc.buildEchoMessages(waveID, state.Parent)
 }
 
 // onWaveComplete est le callback déclenché sur l'initiateur quand la vague est terminée.
@@ -149,7 +149,7 @@ func (nc *NetworkControler) onWaveComplete(waveID string) {
 func (nc *NetworkControler) buildWaveMessages(waveID string, initiator string, parent string) string {
 	msg := parser.Message{
 		Sender:  nc.SiteID,
-		Dest:    BROADCAST,
+		Dest:    BROADCAST_NEIGHBORS,
 		Action:  WAVE,
 		Payload: initiator + "," + parent + "," + waveID,
 	}

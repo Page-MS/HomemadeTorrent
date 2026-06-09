@@ -10,6 +10,7 @@ import (
 )
 
 const BROADCAST = control.BROADCAST
+const BROADCAST_NEIGHBORS = "-2"
 
 type NetworkControler struct {
 	Controler    *control.Controller
@@ -17,6 +18,8 @@ type NetworkControler struct {
 	SiteID       string
 	NbNeighbors  int
 	Waves        map[string]*WaveState
+	Election     *ElectionState
+	ElectedID    string
 }
 
 func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int) *NetworkControler {
@@ -56,15 +59,22 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 
 	// ============= Logique Network Controler =============
 	// Si le message concerne le reseau
-	// TODO: vague, arrivé, depart
+	// TODO: arrivé, depart
 	switch pMsg.Action {
 	case WAVE:
-		msg, _ := nc.HandleWave(pMsg)
+		msg := nc.HandleWave(pMsg)
 		responses = append(responses, msg)
-
 	case RETURN_WAVE:
-		msg, _ := nc.HandleEcho(pMsg)
+		msg := nc.HandleEcho(pMsg)
 		responses = append(responses, msg)
+	case WAVE_ELECTION:
+		msg := nc.HandleElectionWave(pMsg)
+		responses = append(responses, msg)
+	case ECHO_ELECTION:
+		msg := nc.HandleElectionEcho(pMsg)
+		responses = append(responses, msg)
+	case ELECTED:
+		nc.HandleElected(pMsg)
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
@@ -89,6 +99,9 @@ func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
 	case START_WAVE:
 		msg := nc.InitWave(uuid.NewString())
 		responses = append(responses, msg)
+	case START_ELECTION:
+		msg := nc.StartElection()
+		responses = append(responses, msg)
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromLocal(raw)
@@ -111,14 +124,14 @@ func (nc *NetworkControler) routeMessage(pMsg parser.Message) (processLocal bool
 	}
 
 	// Broadcast : traiter ET re-émettre
-	if pMsg.Dest == control.BROADCAST {
-		// Exeception si c'est une propagation vague : on intercepte le broadcast
-		if pMsg.Action == WAVE {
-			log.Printf("[ROUTAGE] Broadcast vague reçu sur site %s, pas de propagation\n", nc.SiteID)
-			return true, false
-		}
+	if pMsg.Dest == BROADCAST {
 		log.Printf("[ROUTAGE] Broadcast reçu sur site %s\n", nc.SiteID)
 		return true, true
+	}
+
+	if pMsg.Dest == BROADCAST_NEIGHBORS {
+		log.Printf("[ROUTAGE] Broadcast seulement aux voisins reçu sur site %s, pas de propagation\n", nc.SiteID)
+		return true, false
 	}
 
 	// Message pour ce site : traiter, ne pas re-émettre
