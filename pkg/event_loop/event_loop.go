@@ -41,7 +41,7 @@ func StartBootstrap(siteID string) {
 	//Start(allSiteIDs, siteID)
 }
 
-func Start(allSiteIDs []string, siteID string) {
+func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
 	// Debug
 	dir, _ := os.Getwd()
 	log.Printf("working dir: %s", dir)
@@ -55,7 +55,7 @@ func Start(allSiteIDs []string, siteID string) {
 	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
 	registre.InitialiseRegistre(siteID, &register)
 
-	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register)
+	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors)
 
 	log.Printf("SiteID: %s, Index: %d, All sites: %s\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs)
 

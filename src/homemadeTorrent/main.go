@@ -4,35 +4,33 @@ import (
 	"HomemadeTorrent/pkg/event_loop"
 	"log"
 	"os"
+	"strconv"
 )
 
 func main() {
 	args := os.Args[1:]
-	println("Arguments:", args)
-	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
-		log.Fatal("Usage:\n" +
-			"  program <siteID> <bootrstrapbool> <allSiteIDs...>\n\n" +
-			"Example:\n" +
-			"  go run main.go Site1 1 Site1 Site2 Site3")
 
-	}
-	if len(args) < 2 {
+	if len(args) < 4 || (args[0] == "-h" || args[0] == "--help") {
 		log.Fatal("Usage:\n" +
-			"  program <siteID> <bootrstrapbool> <allSiteIDs...>\n\n" +
+			"  program <siteID> <nbNeighbors> <bootrstrapbool> <allSiteIDs...>\n\n" +
 			"Example:\n" +
-			"  go run main.go Site1 1 Site1 Site2 Site3")
+			"  go run main.go Site1 2 1 Site1 Site2 Site3")
+
 	}
 
 	siteID := args[0]
-	bootstrap := args[1]
-	allSiteIDs := args[2:]
+	nbNeighborsStr := args[1]
+	bootstrap := args[2]
+	allSiteIDs := args[3:]
+
+	nbNeighbors, _ := strconv.Atoi(nbNeighborsStr)
 
 	// Lancement boucle
 	if bootstrap == "1" {
 		log.Printf("Bootstrap pour le site %s\n", siteID)
 		event_loop.StartBootstrap(siteID)
 	} else {
-		event_loop.Start(allSiteIDs, siteID)
+		event_loop.Start(allSiteIDs, siteID, nbNeighbors)
 
 	}
 }

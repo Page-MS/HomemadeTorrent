@@ -11,13 +11,15 @@ type NetworkControler struct {
 	Controler    *control.Controller
 	SeenMessages map[string]bool // Messages déjà vu par le site
 	SiteID       string
+	NbNeighbors  int
 }
 
-func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre) *NetworkControler {
+func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int) *NetworkControler {
 	return &NetworkControler{
 		Controler:    control.NewController(siteID, allSiteIDs, r),
 		SeenMessages: make(map[string]bool),
 		SiteID:       siteID,
+		NbNeighbors:  nbNeighbors,
 	}
 }
 
