@@ -21,16 +21,14 @@ func main() {
 	siteID := args[0]
 	nbNeighborsStr := args[1]
 	bootstrap := args[2]
-	allSiteIDs := args[2:]
+	allSiteIDs := args[3:]
 
 	nbNeighbors, _ := strconv.Atoi(nbNeighborsStr)
 
 	// Lancement boucle
 	if bootstrap == "1" {
-		log.Printf("Bootstrap pour le site %s\n", siteID)
 		event_loop.StartBootstrap(siteID)
 	} else {
 		event_loop.Start(allSiteIDs, siteID, nbNeighbors)
-
 	}
 }

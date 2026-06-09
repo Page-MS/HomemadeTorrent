@@ -36,8 +36,9 @@ type Event struct {
 }
 
 func StartBootstrap(siteID string) {
+	log.Printf("Bootstrap pour le site %s\n", siteID)
 	// We contact the bootstrap node which we have the access to the fifo
-	write("BOOTSTRAP " + siteID)
+	//write("BOOTSTRAP " + siteID)
 	//Start(allSiteIDs, siteID)
 }
 
