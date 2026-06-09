@@ -15,21 +15,16 @@ type NetworkControler struct {
 	Controler    *control.Controller
 	SeenMessages map[string]bool // Messages déjà vu par le site
 	SiteID       string
-	nbNeighbors  map[string]int
+	NbNeighbors  int
 	Waves        map[string]*WaveState
 }
 
-func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors []int) *NetworkControler {
-	neighborsMap := make(map[string]int)
-	for i, id := range allSiteIDs {
-		neighborsMap[id] = nbNeighbors[i]
-	}
-
+func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int) *NetworkControler {
 	return &NetworkControler{
 		Controler:    control.NewController(siteID, allSiteIDs, r),
 		SeenMessages: make(map[string]bool),
 		SiteID:       siteID,
-		nbNeighbors:  neighborsMap,
+		NbNeighbors:  nbNeighbors,
 		Waves:        make(map[string]*WaveState),
 	}
 }

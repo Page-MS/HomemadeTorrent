@@ -35,7 +35,13 @@ type Event struct {
 	Data   string
 }
 
-func Start(allSiteIDs []string, siteID string, nbNeighbors []int) {
+func StartBootstrap(siteID string) {
+	// We contact the bootstrap node which we have the access to the fifo
+	write("BOOTSTRAP " + siteID)
+	//Start(allSiteIDs, siteID)
+}
+
+func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
 	// Debug
 	dir, _ := os.Getwd()
 	log.Printf("working dir: %s", dir)

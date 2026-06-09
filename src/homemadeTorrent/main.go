@@ -5,28 +5,32 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 )
 
 func main() {
 	args := os.Args[1:]
-	if len(args) < 3 {
+
+	if len(args) < 4 || (args[0] == "-h" || args[0] == "--help") {
 		log.Fatal("Usage:\n" +
-			"  program <siteID> <nbNeighbors> <allSiteIDs...>\n\n" +
+			"  program <siteID> <nbNeighbors> <bootrstrapbool> <allSiteIDs...>\n\n" +
 			"Example:\n" +
-			"  go run main.go Site1 2 Site1 Site2 Site3")
+			"  go run main.go Site1 2 1 Site1 Site2 Site3")
+
 	}
 
 	siteID := args[0]
-	nbNeighborsStr := os.Args[2]
-	allSiteIDs := args[2:]
+	nbNeighborsStr := args[1]
+	bootstrap := args[2]
+	allSiteIDs := args[3:]
 
-	parts := strings.Fields(nbNeighborsStr)
-	nbNeighbors := make([]int, len(parts))
-	for i, p := range parts {
-		nbNeighbors[i], _ = strconv.Atoi(p)
-	}
+	nbNeighbors, _ := strconv.Atoi(nbNeighborsStr)
 
 	// Lancement boucle
-	event_loop.Start(allSiteIDs, siteID, nbNeighbors)
+	if bootstrap == "1" {
+		log.Printf("Bootstrap pour le site %s\n", siteID)
+		event_loop.StartBootstrap(siteID)
+	} else {
+		event_loop.Start(allSiteIDs, siteID, nbNeighbors)
+
+	}
 }

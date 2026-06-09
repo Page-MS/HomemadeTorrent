@@ -32,6 +32,7 @@ for node in $NODES; do
         < "$FIFO_DIR/in_$node" \
         > "$FIFO_DIR/out_$node" \
         2> "$LOG_DIR/$node.log" &
+fi
 done
 
 # Délai pour laisser les noeuds démarrer
@@ -50,8 +51,8 @@ cat "$FIFO_DIR/out_node4" | tee "$FIFO_DIR/in_node2" "$FIFO_DIR/in_node5" "$FIFO
 cat "$FIFO_DIR/out_node5" | tee "$FIFO_DIR/in_node2" "$FIFO_DIR/in_node4" > /dev/null &
 # 6 -> 3, 7
 cat "$FIFO_DIR/out_node6" | tee "$FIFO_DIR/in_node3" "$FIFO_DIR/in_node7" > /dev/null &
-# 7 -> 4, 6
-cat "$FIFO_DIR/out_node7" | tee "$FIFO_DIR/in_node4" "$FIFO_DIR/in_node6" > /dev/null &
+# 7 -> 4 Is gonna bootstrap the network
+cat "$FIFO_DIR/out_node7" | tee "$FIFO_DIR/in_node4" > /dev/null &
 
 echo "Réseau démarré. Ctrl+C pour arrêter."
 
