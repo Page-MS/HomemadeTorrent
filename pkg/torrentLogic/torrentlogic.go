@@ -445,25 +445,25 @@ func HandleRegisterUpdateMessage(msg Message, reg *registre.Registre) error {
 func InitNewUser(userID string, reg *registre.Registre, userDirectory string, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) error {
 	reg.AddNewUserToRegister(userID, userDirectory)
 	// We use a SC to inform the others
-	SendMessageToPeer(AskingFromSC, false, currentSite, 0, 0, 0, 0, 0, "", outputMessagesChannel)
+	SendMessageToPeer(AskingFromSC, false, userID, "", "", None, "", 0, "", outputMessagesChannel)
 	select {
 	case message := <-incomingMessagesChannel:
 		log.Printf("\n[TORRENT] Message reçu %v: \n", message)
 		// If this is the authorziation for a critical section
 		if message.MessageType == StartSC {
-			log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", file.Name)
-			err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", 0, 0, outputMessagesChannel, reg)
+			log.Printf("\n[TORRENT] Received authorization to start critical section, updating register of the others")
+			err := SendRegisterUpdateToPeer(userID, "", "-1", "", 0, outputMessagesChannel, reg)
 			if err != nil {
-				log.Printf("\n[TORRENT] Error while sending register update to peers for file %s: %v", file.Name, err)
-				return false, err
+				log.Printf("\n[TORRENT] Error while sending register update to peers", err)
+				return err
 			}
 			// We send the message announcing we have finished with our critical section
-			SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
+			SendMessageToPeer(DoneWithSC, false, userID, "", "-1", 0, "", 0, "", outputMessagesChannel)
 
 		} else {
-			err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
-			return false, err
+			err := fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
+			return err
 		}
 	}
-
+	return nil
 }
