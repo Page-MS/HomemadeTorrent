@@ -124,7 +124,7 @@ func (nc *NetworkControler) HandleElectionEcho(pMsg parser.Message) string {
 
 // HandleElected traite la proclamation broadcast de l'élu.
 func (nc *NetworkControler) HandleElected(pMsg parser.Message) {
-	nc.ElectedID = pMsg.Payload
+	nc.ElectedID = pMsg.Sender
 	nc.Election = nil
 	log.Printf("[ELECTION] Élu proclamé : %s\n", nc.ElectedID)
 }
@@ -169,10 +169,9 @@ func (nc *NetworkControler) buildElectionEcho(eluID string, dest string) string 
 
 func (nc *NetworkControler) buildElectedBroadcast() string {
 	msg := parser.Message{
-		Sender:  nc.SiteID,
-		Dest:    BROADCAST,
-		Action:  ELECTED,
-		Payload: nc.SiteID,
+		Sender: nc.SiteID,
+		Dest:   BROADCAST,
+		Action: ELECTED,
 	}
 	encoded, err := parser.Encode(msg)
 	if err != nil {
