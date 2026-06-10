@@ -1,13 +1,14 @@
 package networkcontroler
 
 import (
+	"HomemadeTorrent/pkg/parser"
 	"log"
 	"sort"
 )
 
 // AddUser intègre un nouveau site dans les structures locales.
 // isLeader doit être true unqiuement si le site courant est l'élu qui a géré l'ajout.
-func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) {
+func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) string {
 	oldDirectory := nc.Controler.NetworkDirectory
 	oldVector := nc.Controler.Vector.GetCopy()
 
@@ -50,5 +51,24 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) {
 		log.Printf("[ADD_USER] ACTION LEADER Le site %s devient mon nouveau voisin direct. Total voisins : %d\n", newSiteID, nc.NbNeighbors)
 
 		// TODO: Envoyer la configuration de base au nouveau site (Registre, liste des pairs, etc.)
+
+		// Création du message de confirmation pour prévenir le reste du réseau
+		msg := parser.Message{
+			Sender:  nc.SiteID,
+			Dest:    BROADCAST,
+			Action:  "ADD_USER_CONFIRM",
+			Payload: newSiteID,
+		}
+
+		encodedMsg, err := parser.Encode(msg)
+		if err != nil {
+			log.Printf("[ADD_USER] Erreur encodage ADD_USER_CONFIRM : %v\n", err)
+			return ""
+		}
+
+		return encodedMsg
 	}
+
+	// Si on n'est pas le leader, on n'a rien à envoyer sur le réseau
+	return ""
 }
