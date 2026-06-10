@@ -35,8 +35,15 @@ type Event struct {
 	Data   string
 }
 
-func StartBootstrap(siteID string) {
+func StartBootstrap(siteID string) int {
+	dir, _ := os.Getwd()
+	log.Printf("working dir: %s", dir)
+
 	log.Printf("Bootstrap pour le site %s\n", siteID)
+
+	waitchan := make(chan int)
+	return <-waitchan
+
 	// We contact the bootstrap node which we have the access to the fifo
 	//write("BOOTSTRAP " + siteID)
 	//Start(allSiteIDs, siteID)
