@@ -55,6 +55,8 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
 	register := registre.Registre{}
 	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
 	registre.InitialiseRegistre(siteID, &register)
+	register.AddNewUserToRegister("Patrick", "../../bin/")
+	register.PrintRegister()
 
 	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors)
 
