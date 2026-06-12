@@ -61,6 +61,7 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) string {
 	nc.Controler.NetworkDirectory.IndexToID = newIDs
 	nc.Controler.NetworkDirectory.IDToIndex = newIDToIndex
 	nc.Controler.SiteIndex = newMyIndex
+	nc.Controler.Reg.AddNewUserToRegister(newSiteID, newSiteID)
 
 	log.Printf("[ADD_USER] Annuaire mis à jour. Le site '%s' est officiellement reconnu.\n", newSiteID)
 
