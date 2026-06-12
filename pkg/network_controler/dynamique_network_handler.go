@@ -24,6 +24,7 @@ type PipelineInfo struct {
 const (
 	START_ASKING_TO_JOIN_NETWORK = "START_ASKING_TO_JOIN_NETWORK"
 	ASKING_TO_JOIN_NETWORK       = "ASKING_TO_JOIN_NETWORK"
+	NAME_ERROR                   = "NAME_ERROR"
 )
 
 func (nc *NetworkControler) AskPeerToJoinNetwork(pMsg parser.Message) {
@@ -76,34 +77,67 @@ func (nc *NetworkControler) HandleElectionResult() []string {
 	fifoOutPath := "/tmp/network_fifos/out_" + nc.SiteID
 	fifoInPath := "/tmp/network_fifos/in_" + nc.SiteID
 
+	result := nc.PeersWaitingToJoin[:0]
 	for _, newSiteName := range nc.PeersWaitingToJoin {
-
-		// Verifier l'unicité du nom
-		if slices.Contains(nc.Controler.NetworkDirectory.IndexToID, newSiteName) {
-			// TODO: Renvoyer au site un message d'erreur
-		}
 
 		newSitefifoInPath := "/tmp/network_fifos/in_" + newSiteName
 		newSitefifoOutPath := "/tmp/network_fifos/out_" + newSiteName
+
+		// Verifier l'unicité du nom
+		if slices.Contains(nc.Controler.NetworkDirectory.IndexToID, newSiteName) {
+			// Renvoyer au site un message d'erreur
+			// Ouvrir le FIFO en écriture
+			fifo, err := os.OpenFile(newSitefifoInPath, os.O_WRONLY, os.ModeNamedPipe)
+			if err != nil {
+				log.Printf("[NETWORK_CONTROLER] Impossible d'ouvrir le fifo %s : %v\n", newSitefifoInPath, err)
+				result = append(result, newSiteName)
+				continue
+			}
+			defer fifo.Close()
+
+			// Écrire le message
+			msg := parser.Message{
+				Sender: nc.SiteID,
+				Dest:   newSiteName,
+				Action: NAME_ERROR,
+			}
+			encoded, err := parser.Encode(msg)
+			if err != nil {
+				log.Printf("[NETWORK_CONTROLER] Erreur encodage : %v\n", err)
+				result = append(result, newSiteName)
+				continue
+			}
+
+			_, err = fifo.WriteString(encoded + "\n")
+			if err != nil {
+				log.Printf("[NETWORK_CONTROLER] Erreur encodage : %v\n", err)
+				result = append(result, newSiteName)
+				continue
+			}
+			log.Printf("[NETWORK_CONTROLER] Envoie à %s de message : %s\n", newSitefifoInPath, encoded)
+		}
 
 		// Link des nouveaux lien du shell
 		// out site -> in new site
 		err := AddFifoToLink(fifoOutPath, newSitefifoInPath, false)
 		if err != nil {
 			log.Printf("[ARRIVE] Erreur lors de link entre fifo out %s et fifo in %s : %v\n", fifoOutPath, newSitefifoInPath, err)
-			return nil
+			result = append(result, newSiteName)
+			continue
 		}
 
 		// out new site -> in site
 		err = AddFifoToLink(newSitefifoOutPath, fifoInPath, true)
 		if err != nil {
 			log.Printf("[ARRIVE] Erreur lors de link entre fifo out %s et fifo in %s : %v\n", newSitefifoOutPath, fifoInPath, err)
-			return nil
+			result = append(result, newSiteName)
+			continue
 		}
 
 		// Appel de fonction update de ce site et des autres
 		response = append(response, nc.AddUser(newSiteName, true)...)
 	}
+	nc.PeersWaitingToJoin = result
 	return response
 }
 

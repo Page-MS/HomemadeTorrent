@@ -5,7 +5,12 @@ PROJECT_DIR="../src/homemadeTorrent"
 BIN_DIR="../bin"
 FIFO_DIR="/tmp/network_fifos"
 
-node="node8"
+if [ -z "$1" ]; then
+    echo "Usage: $0 <nom_node>"
+    exit 1
+fi
+
+node="$1"
 
 # Nettoyage et setup des dossiers
 mkdir -p "$LOG_DIR"
@@ -36,7 +41,7 @@ sleep 1
 # Topologie
 # 8 -> 8
 set -m
-cat "$FIFO_DIR/out_node8" | tee "$FIFO_DIR/in_node8" > /dev/null &
+cat "$FIFO_DIR/out_$node" | tee "$FIFO_DIR/in_$node" > /dev/null &
 set +m
 
 echo "Réseau démarré. Ctrl+C pour arrêter."

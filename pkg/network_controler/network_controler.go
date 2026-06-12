@@ -87,7 +87,14 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		msg := nc.HandlePeerAskingToJoin(pMsg)
 		responses = append(responses, msg)
 	case ADD_USER_CONFIRM:
-		nc.AddUser(pMsg.Payload, false)
+		// Si on est le site ajouté, on doit pas se rajouter nous meme à nous meme
+		if pMsg.Payload != nc.SiteID {
+			nc.AddUser(pMsg.Payload, false)
+		}
+	case UPDATE_REGISTRE:
+		nc.UpdateRegistre(pMsg)
+	case UPDATE_LISTE:
+		nc.UpdateListe(pMsg)
 
 	default:
 		// Si le message ne nous concerne pas
