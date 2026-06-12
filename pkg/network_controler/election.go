@@ -7,11 +7,12 @@ import (
 )
 
 const (
-	START_ELECTION = "START_ELECTION"
-	ELECTION_WAVE  = "ELECTION_WAVE"
-	WAVE_ELECTION  = "WAVE_ELECTION" // message bleu
-	ECHO_ELECTION  = "ECHO_ELECTION" // message rouge
-	ELECTED        = "ELECTED"
+	START_ELECTION   = "START_ELECTION"
+	ELECTION_WAVE    = "ELECTION_WAVE"
+	WAVE_ELECTION    = "WAVE_ELECTION" // message bleu
+	ECHO_ELECTION    = "ECHO_ELECTION" // message rouge
+	ELECTED          = "ELECTED"
+	RELEASE_ELECTION = "RELEASE_ELECTION"
 )
 
 // ElectionState représente l'état local de l'élection par extinction de vagues.
@@ -93,20 +94,20 @@ func (nc *NetworkControler) HandleElectionWave(pMsg parser.Message) string {
 }
 
 // HandleElectionEcho traite un message rouge (ECHO_ELECTION).
-func (nc *NetworkControler) HandleElectionEcho(pMsg parser.Message) string {
+func (nc *NetworkControler) HandleElectionEcho(pMsg parser.Message) []string {
 	receivedElu := pMsg.Payload
 
 	if nc.Election == nil || nc.Election.EluID != receivedElu {
 		// Message rouge d'une vague qu'on a abandonnée : ignorer
 		log.Printf("[ELECTION] Rouge ignoré élu=%s (élu courant=%v)\n", receivedElu, eluOuNil(nc.Election))
-		return ""
+		return nil
 	}
 
 	nc.Election.NbAttendus--
 	log.Printf("[ELECTION] Rouge reçu élu=%s (restant=%d)\n", receivedElu, nc.Election.NbAttendus)
 
 	if nc.Election.NbAttendus > 0 {
-		return ""
+		return nil
 	}
 
 	// Tous les rouges reçus
@@ -114,12 +115,15 @@ func (nc *NetworkControler) HandleElectionEcho(pMsg parser.Message) string {
 		// On est l'élu
 		log.Printf("[ELECTION] *** ÉLU = %s ***\n", nc.SiteID)
 		nc.ElectedID = nc.SiteID
-		return nc.buildElectedBroadcast()
+
+		result := []string{nc.buildElectedBroadcast()}
+		result = append(result, nc.HandleElectionResult()...)
+		return result
 	}
 
 	// Renvoyer le rouge vers notre parent
 	log.Printf("[ELECTION] Rouge remonté vers parent %s élu=%s\n", nc.Election.Parent, receivedElu)
-	return nc.buildElectionEcho(receivedElu, nc.Election.Parent)
+	return []string{nc.buildElectionEcho(receivedElu, nc.Election.Parent)}
 }
 
 // HandleElected traite la proclamation broadcast de l'élu.
@@ -130,9 +134,13 @@ func (nc *NetworkControler) HandleElected(pMsg parser.Message) {
 }
 
 // HandleReleaseElected traite la libération broadcast de l'élection.
-func (nc *NetworkControler) HandleReleaseElected(pMsg parser.Message) {
+func (nc *NetworkControler) HandleReleaseElected(pMsg parser.Message) string {
 	nc.ElectedID = ""
 	log.Printf("[ELECTION] Libération, nouvelle election possible\n")
+	if len(nc.PeersWaitingToJoin) != 0 {
+		return nc.StartElection()
+	}
+	return ""
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

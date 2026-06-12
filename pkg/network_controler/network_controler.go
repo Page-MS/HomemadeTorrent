@@ -16,19 +16,24 @@ type NetworkControler struct {
 	Controler    *control.Controller
 	SeenMessages map[string]bool // Messages déjà vu par le site
 	SiteID       string
-	NbNeighbors  int
-	Waves        map[string]*WaveState
-	Election     *ElectionState
-	ElectedID    string
+
+	NbNeighbors int
+	Waves       map[string]*WaveState
+
+	Election  *ElectionState
+	ElectedID string
+
+	PeersWaitingToJoin []string
 }
 
 func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int) *NetworkControler {
 	return &NetworkControler{
-		Controler:    control.NewController(siteID, allSiteIDs, r),
-		SeenMessages: make(map[string]bool),
-		SiteID:       siteID,
-		NbNeighbors:  nbNeighbors,
-		Waves:        make(map[string]*WaveState),
+		Controler:          control.NewController(siteID, allSiteIDs, r),
+		SeenMessages:       make(map[string]bool),
+		SiteID:             siteID,
+		NbNeighbors:        nbNeighbors,
+		Waves:              make(map[string]*WaveState),
+		PeersWaitingToJoin: make([]string, 0),
 	}
 }
 
@@ -72,9 +77,23 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, msg)
 	case ECHO_ELECTION:
 		msg := nc.HandleElectionEcho(pMsg)
-		responses = append(responses, msg)
+		responses = append(responses, msg...)
 	case ELECTED:
 		nc.HandleElected(pMsg)
+	case RELEASE_ELECTION:
+		msg := nc.HandleReleaseElected(pMsg)
+		responses = append(responses, msg)
+	case ASKING_TO_JOIN_NETWORK:
+		msg := nc.HandlePeerAskingToJoin(pMsg)
+		responses = append(responses, msg)
+	case ADD_USER_CONFIRM:
+		// Si on est le site ajouté, on doit pas se rajouter nous meme à nous meme
+		if pMsg.Payload != nc.SiteID {
+			nc.AddUser(pMsg.Payload, false)
+		}
+	case UPDATE_LISTE:
+		nc.UpdateListe(pMsg)
+
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
@@ -102,6 +121,8 @@ func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
 	case START_ELECTION:
 		msg := nc.StartElection()
 		responses = append(responses, msg)
+	case START_ASKING_TO_JOIN_NETWORK:
+		nc.AskPeerToJoinNetwork(pMsg)
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromLocal(raw)

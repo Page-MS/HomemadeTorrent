@@ -141,7 +141,6 @@ func (nc *NetworkControler) HandleEcho(pMsg parser.Message) string {
 // onWaveComplete est le callback déclenché sur l'initiateur quand la vague est terminée.
 func (nc *NetworkControler) onWaveComplete(waveID string) {
 	log.Printf("[WAVE] Vague %s complète sur le réseau entier\n", waveID)
-	// TODO: déclencher l'action post-vague (ex: début du téléchargement, snapshot, election…)
 }
 
 // ─── Helpers de construction de messages ─────────────────────────────────────
