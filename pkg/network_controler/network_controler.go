@@ -84,6 +84,8 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 	case INIT_FIND_NEIGHBORS:
 		msg := nc.HandleFindNeighbors(pMsg)
 		responses = append(responses, msg)
+	case RECEIVE_NODE_LEAVING:
+		nc.ReceiveLeavingProcess(pMsg)
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)

@@ -7,12 +7,11 @@ import (
 )
 
 const (
-	START_ELECTION        = "START_ELECTION"
-	START_LEAVING_PROCESS = "START_LEAVING_PROCESS"
-	ELECTION_WAVE         = "ELECTION_WAVE"
-	WAVE_ELECTION         = "WAVE_ELECTION" // message bleu
-	ECHO_ELECTION         = "ECHO_ELECTION" // message rouge
-	ELECTED               = "ELECTED"
+	START_ELECTION = "START_ELECTION"
+	ELECTION_WAVE  = "ELECTION_WAVE"
+	WAVE_ELECTION  = "WAVE_ELECTION" // message bleu
+	ECHO_ELECTION  = "ECHO_ELECTION" // message rouge
+	ELECTED        = "ELECTED"
 )
 
 // ElectionState représente l'état local de l'élection par extinction de vagues.
