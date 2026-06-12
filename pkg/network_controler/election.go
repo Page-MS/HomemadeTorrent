@@ -115,7 +115,10 @@ func (nc *NetworkControler) HandleElectionEcho(pMsg parser.Message) []string {
 		// On est l'élu
 		log.Printf("[ELECTION] *** ÉLU = %s ***\n", nc.SiteID)
 		nc.ElectedID = nc.SiteID
-		return []string{nc.buildElectedBroadcast(), nc.HandleElectionResult()}
+
+		result := []string{nc.buildElectedBroadcast()}
+		result = append(result, nc.HandleElectionResult()...)
+		return result
 	}
 
 	// Renvoyer le rouge vers notre parent

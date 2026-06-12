@@ -53,6 +53,9 @@ func (nc *NetworkControler) AskPeerToJoinNetwork(pMsg parser.Message) {
 		log.Fatal(err)
 	}
 	log.Printf("[NETWORK_CONTROLER] Envoie à %s de message : %s\n", fifoPath, encoded)
+
+	// Ajout du site comme voisin
+	nc.NbNeighbors++
 }
 
 func (nc *NetworkControler) HandlePeerAskingToJoin(pMsg parser.Message) string {
@@ -67,8 +70,9 @@ func (nc *NetworkControler) HandlePeerAskingToJoin(pMsg parser.Message) string {
 	return response
 }
 
-func (nc *NetworkControler) HandleElectionResult() string {
-	// TODO: Gestion du nom, link du shell
+func (nc *NetworkControler) HandleElectionResult() []string {
+	var response []string
+
 	fifoOutPath := "/tmp/network_fifos/out_" + nc.SiteID
 	fifoInPath := "/tmp/network_fifos/in_" + nc.SiteID
 
@@ -87,20 +91,20 @@ func (nc *NetworkControler) HandleElectionResult() string {
 		err := AddFifoToLink(fifoOutPath, newSitefifoInPath, false)
 		if err != nil {
 			log.Printf("[ARRIVE] Erreur lors de link entre fifo out %s et fifo in %s : %v\n", fifoOutPath, newSitefifoInPath, err)
-			return ""
+			return nil
 		}
 
 		// out new site -> in site
 		err = AddFifoToLink(newSitefifoOutPath, fifoInPath, true)
 		if err != nil {
 			log.Printf("[ARRIVE] Erreur lors de link entre fifo out %s et fifo in %s : %v\n", newSitefifoOutPath, fifoInPath, err)
-			return ""
+			return nil
 		}
-	}
 
-	log.Printf("[ARRIVEE] Logique d'ajout lancée\n")
-	// Appel de fonction update de ce site et des autres
-	return ""
+		// Appel de fonction update de ce site et des autres
+		response = append(response, nc.AddUser(newSiteName, true)...)
+	}
+	return response
 }
 
 // Trouve le pipeline (cat + tee) qui lit un FIFO donné

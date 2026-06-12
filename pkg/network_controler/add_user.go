@@ -4,12 +4,13 @@ import (
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
 	"log"
-	"sort"
 )
+
+const ADD_USER_CONFIRM = "ADD_USER_CONFIRM"
 
 // AddUser intègre un nouveau site dans les structures locales.
 // isLeader doit être true unqiuement si le site courant est l'élu qui a géré l'ajout.
-func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) string {
+func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) []string {
 	oldDirectory := nc.Controler.NetworkDirectory
 	oldVector := nc.Controler.Vector.GetCopy()
 	oldTab := nc.Controler.DistFile.GetCopy()
@@ -18,9 +19,6 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) string {
 	newIDs := make([]string, len(oldDirectory.IndexToID))
 	copy(newIDs, oldDirectory.IndexToID)
 	newIDs = append(newIDs, newSiteID)
-
-	// Tri déterministe pour aligner les index de tout le réseau
-	sort.Strings(newIDs)
 
 	// Reconstitution de la map d'indexation
 	newIDToIndex := make(map[string]int)
@@ -61,7 +59,7 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) string {
 	nc.Controler.NetworkDirectory.IndexToID = newIDs
 	nc.Controler.NetworkDirectory.IDToIndex = newIDToIndex
 	nc.Controler.SiteIndex = newMyIndex
-	nc.Controler.Reg.AddNewUserToRegister(newSiteID, newSiteID)
+	//nc.Controler.Reg.AddNewUserToRegister(newSiteID, newSiteID)
 
 	log.Printf("[ADD_USER] Annuaire mis à jour. Le site '%s' est officiellement reconnu.\n", newSiteID)
 
@@ -70,26 +68,27 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) string {
 		nc.NbNeighbors++
 
 		log.Printf("[ADD_USER] ACTION LEADER Le site %s devient mon nouveau voisin direct. Total voisins : %d\n", newSiteID, nc.NbNeighbors)
+		var responses []string
 
-		// TODO: Envoyer la configuration de base au nouveau site (Registre, liste des pairs, etc.)
+		// TODO: Envoyer la configuration de base au nouveau site (Registre, liste des pairs)
 
 		// Création du message de confirmation pour prévenir le reste du réseau
 		msg := parser.Message{
 			Sender:  nc.SiteID,
 			Dest:    BROADCAST,
-			Action:  "ADD_USER_CONFIRM",
+			Action:  ADD_USER_CONFIRM,
 			Payload: newSiteID,
 		}
 
 		encodedMsg, err := parser.Encode(msg)
 		if err != nil {
 			log.Printf("[ADD_USER] Erreur encodage ADD_USER_CONFIRM : %v\n", err)
-			return ""
+			return nil
 		}
 
-		return encodedMsg
+		return append(responses, encodedMsg)
 	}
 
 	// Si on n'est pas le leader, on n'a rien à envoyer sur le réseau
-	return ""
+	return nil
 }

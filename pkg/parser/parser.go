@@ -58,7 +58,6 @@ func Decode(raw_data string) (Message, error) {
 			continue
 		}
 		if len(parts) != 2 {
-			log.Printf("[PARSER] Erreur parsing. raw_data: %s\nlines: %q\n", raw_data, lines) //TODO: debug a enlever
 			if msg.Id != "" {
 				return Message{}, fmt.Errorf("Message line must have exactly 2 component (msgID: %s). Found: %s", msg.Id, strings.Join(parts, " "))
 			}

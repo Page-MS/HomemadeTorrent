@@ -86,6 +86,9 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 	case ASKING_TO_JOIN_NETWORK:
 		msg := nc.HandlePeerAskingToJoin(pMsg)
 		responses = append(responses, msg)
+	case ADD_USER_CONFIRM:
+		nc.AddUser(pMsg.Payload, false)
+
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
