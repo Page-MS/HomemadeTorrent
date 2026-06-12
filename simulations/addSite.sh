@@ -35,7 +35,9 @@ sleep 1
 
 # Topologie
 # 8 -> 8
-cat "$FIFO_DIR/out_node8" > "$FIFO_DIR/in_node8" &
+set -m
+cat "$FIFO_DIR/out_node8" | tee "$FIFO_DIR/in_node8" > /dev/null &
+set +m
 
 echo "Réseau démarré. Ctrl+C pour arrêter."
 
