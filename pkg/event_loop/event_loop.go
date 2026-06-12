@@ -42,7 +42,7 @@ func StartBootstrap(siteID string) {
 	//Start(allSiteIDs, siteID)
 }
 
-func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
+func Start(allSiteIDs []string, siteID string, nbNeighbors int, siteAddress string) {
 	// Debug
 	dir, _ := os.Getwd()
 	log.Printf("working dir: %s", dir)
@@ -58,17 +58,25 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
 	register.AddNewUserToRegister("Patrick", "../../bin/")
 	register.PrintRegister()
 
-	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors)
+	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors, siteAddress)
 
-	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors)
+	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d, SiteAddress: %s\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors, networkControler.SiteAddress)
 
 	go listenStdEntry(eventQueue)
 	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register)
 	go listenLocalTorrentOutput(eventQueue, networkControler.Controler)
 	go siteLogic(processingChan, eventQueue, networkControler)
+	// We send a message to our direct neighbors to get their adresses and names
 
 	log.Printf("[EVENT_LOOP] START\n")
 
+	responses := networkControler.HandleIncomingFromLocal("ACTION:INIT_FIND_NEIGHBORS\nDEST:" + siteID + "\n\n")
+	for _, r := range responses {
+		eventQueue <- Event{
+			Type: WriteMessage,
+			Data: r,
+		}
+	}
 	// Event loop (bloquante)
 	for {
 		event := <-eventQueue

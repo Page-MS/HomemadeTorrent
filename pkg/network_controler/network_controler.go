@@ -13,22 +13,26 @@ const BROADCAST = control.BROADCAST
 const BROADCAST_NEIGHBORS = "-2"
 
 type NetworkControler struct {
-	Controler    *control.Controller
-	SeenMessages map[string]bool // Messages déjà vu par le site
-	SiteID       string
-	NbNeighbors  int
-	Waves        map[string]*WaveState
-	Election     *ElectionState
-	ElectedID    string
+	Controler              *control.Controller
+	SeenMessages           map[string]bool // Messages déjà vu par le site
+	SiteID                 string
+	SiteAddress            string
+	NbNeighbors            int
+	NeighborIDsAndAdresses map[string]string // Map des enfants et leurs adresses (pour gérer le départ)
+	Waves                  map[string]*WaveState
+	Election               *ElectionState
+	ElectedID              string
 }
 
-func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int) *NetworkControler {
+func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int, siteAddress string) *NetworkControler {
 	return &NetworkControler{
-		Controler:    control.NewController(siteID, allSiteIDs, r),
-		SeenMessages: make(map[string]bool),
-		SiteID:       siteID,
-		NbNeighbors:  nbNeighbors,
-		Waves:        make(map[string]*WaveState),
+		Controler:              control.NewController(siteID, allSiteIDs, r),
+		SeenMessages:           make(map[string]bool),
+		SiteID:                 siteID,
+		SiteAddress:            siteAddress,
+		NbNeighbors:            nbNeighbors,
+		NeighborIDsAndAdresses: make(map[string]string),
+		Waves:                  make(map[string]*WaveState),
 	}
 }
 
@@ -75,6 +79,11 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, msg)
 	case ELECTED:
 		nc.HandleElected(pMsg)
+	case I_M_NEIGHBOR:
+		nc.HandleIMNeighborMessage(pMsg)
+	case INIT_FIND_NEIGHBORS:
+		msg := nc.HandleFindNeighbors(pMsg)
+		responses = append(responses, msg)
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
@@ -96,11 +105,18 @@ func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
 
 	// ============= Logique Network Controler =============
 	switch pMsg.Action {
+	case INIT_FIND_NEIGHBORS:
+		log.Printf("[NETWORK CONTROLER][HandleIncomingFromLocal] INIT_FIND_NEIGHBORS reçu, envoi du message à nos voisins\n")
+		msg := nc.InitFindNeighbors()
+		responses = append(responses, msg)
 	case START_WAVE:
 		msg := nc.InitWave(uuid.NewString())
 		responses = append(responses, msg)
 	case START_ELECTION:
 		msg := nc.StartElection()
+		responses = append(responses, msg)
+	case START_LEAVING_PROCESS:
+		msg := nc.StartLeavingProcess()
 		responses = append(responses, msg)
 	default:
 		// Si le message ne nous concerne pas

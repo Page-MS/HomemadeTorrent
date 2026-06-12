@@ -12,23 +12,23 @@ func main() {
 
 	if len(args) < 4 || (args[0] == "-h" || args[0] == "--help") {
 		log.Fatal("Usage:\n" +
-			"  program <siteID> <nbNeighbors> <bootrstrapbool> <allSiteIDs...>\n\n" +
+			"  program <siteID> <siteAddress> <nbNeighbors> <bootrstrapbool> <allSiteIDs...>\n\n" +
 			"Example:\n" +
-			"  go run main.go Site1 2 1 Site1 Site2 Site3")
+			"  go run main.go Site1 /tmp/network_fifos/in_node1 2 1 Site1 Site2 Site3")
 
 	}
 
 	siteID := args[0]
-	nbNeighborsStr := args[1]
-	bootstrap := args[2]
-	allSiteIDs := args[3:]
+	siteAddress := args[1]
+	nbNeighborsStr := args[2]
+	bootstrap := args[3]
+	allSiteIDs := args[4:]
 
 	nbNeighbors, _ := strconv.Atoi(nbNeighborsStr)
-
 	// Lancement boucle
 	if bootstrap == "1" {
 		event_loop.StartBootstrap(siteID)
 	} else {
-		event_loop.Start(allSiteIDs, siteID, nbNeighbors)
+		event_loop.Start(allSiteIDs, siteID, nbNeighbors, siteAddress)
 	}
 }
