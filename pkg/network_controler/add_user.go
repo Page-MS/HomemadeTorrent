@@ -3,7 +3,7 @@ package networkcontroler
 import (
 	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
-	"HomemadeTorrent/pkg/registre"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
 	"strings"
 )
@@ -77,23 +77,7 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) []string {
 		var responses []string
 
 		// TODO: Envoyer la configuration de base au nouveau site (Registre, liste des pairs)
-		jsonReg, err := nc.Controler.Reg.ToJSON()
-		if err != nil {
-			log.Printf("[ADD_USER] Erreur serialisation registre : %v\n", err)
-			return nil
-		}
-		msgRegistre := parser.Message{
-			Sender:  nc.SiteID,
-			Dest:    newSiteID,
-			Action:  UPDATE_REGISTRE,
-			Payload: jsonReg,
-		}
-		encodedMsg, err := parser.Encode(msgRegistre)
-		if err != nil {
-			log.Printf("[ADD_USER] Erreur encodage UPDATE_REGISTRE : %v\n", err)
-			return nil
-		}
-		responses = append(responses, encodedMsg)
+		go torrentlogic.AddNewUserToTorrentLogic(nc.SiteID, newSiteID, nc.Controler.Reg, newSiteID, nc.Controler.OutputTorrentChan, nc.Controler.TorrentScChan)
 
 		msgListe := parser.Message{
 			Sender:  nc.SiteID,
@@ -101,7 +85,7 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) []string {
 			Action:  UPDATE_LISTE,
 			Payload: strings.Join(nc.Controler.NetworkDirectory.IndexToID, ","),
 		}
-		encodedMsg, err = parser.Encode(msgListe)
+		encodedMsg, err := parser.Encode(msgListe)
 		if err != nil {
 			log.Printf("[ADD_USER] Erreur encodage UPDATE_LISTE : %v\n", err)
 			return nil
@@ -127,16 +111,6 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) []string {
 
 	// Si on n'est pas le leader, on n'a rien à envoyer sur le réseau
 	return nil
-}
-
-func (nc *NetworkControler) UpdateRegistre(pMsg parser.Message) {
-	reg := &registre.Registre{}
-	err := reg.FromJSON(pMsg.Payload)
-	if err != nil {
-		log.Printf("[UPDATE_REGISTRE] Erreur deserialisatuion du registre : %v\n", err)
-		return
-	}
-	nc.Controler.Reg.Merge(reg)
 }
 
 func (nc *NetworkControler) UpdateListe(pMsg parser.Message) {

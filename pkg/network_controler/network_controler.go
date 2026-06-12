@@ -91,8 +91,6 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		if pMsg.Payload != nc.SiteID {
 			nc.AddUser(pMsg.Payload, false)
 		}
-	case UPDATE_REGISTRE:
-		nc.UpdateRegistre(pMsg)
 	case UPDATE_LISTE:
 		nc.UpdateListe(pMsg)
 
