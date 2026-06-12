@@ -2,6 +2,7 @@ package torrentlogic
 
 import (
 	"HomemadeTorrent/pkg/registre"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"math/rand"
@@ -374,8 +375,9 @@ func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID 
 	fileSize := uint(fileInfo.Size())
 	filePartContent := make([]byte, fileSize)
 	file.Read(filePartContent)
+	encoded := base64.StdEncoding.EncodeToString(filePartContent)
 	// We send the content of the part to the peer
-	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, transferID, peerID, ReceivingContent, fileID, partID, string(filePartContent), outputMessagesChannel)
+	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, transferID, peerID, ReceivingContent, fileID, partID, encoded, outputMessagesChannel)
 
 	return nil
 }
