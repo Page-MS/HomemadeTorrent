@@ -184,3 +184,16 @@ func ParseFileMessageType(s string) (MessageType, error) {
 		return "", fmt.Errorf("[FILE REPARTIE] unknown MessageType: %s", s)
 	}
 }
+
+// GetCopy retourne une copie du tableau des requêtes
+func (df *DistributedFile) GetCopy() []TabEntry {
+	copyTab := make([]TabEntry, len(df.Tab))
+	copy(copyTab, df.Tab)
+	return copyTab
+}
+
+// UpdateLayout redimensionne et réaligne le tableau lors de l'ajout d'un site
+func (df *DistributedFile) UpdateLayout(newTab []TabEntry, newSiteIndex int) {
+	df.Tab = newTab
+	df.SiteIndex = newSiteIndex
+}
