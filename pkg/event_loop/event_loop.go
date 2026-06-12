@@ -35,21 +35,7 @@ type Event struct {
 	Data   string
 }
 
-func StartBootstrap(siteID string) int {
-	dir, _ := os.Getwd()
-	log.Printf("working dir: %s", dir)
-
-	log.Printf("Bootstrap pour le site %s\n", siteID)
-
-	waitchan := make(chan int)
-	return <-waitchan
-
-	// We contact the bootstrap node which we have the access to the fifo
-	//write("BOOTSTRAP " + siteID)
-	//Start(allSiteIDs, siteID)
-}
-
-func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
+func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int) {
 	// Debug
 	dir, _ := os.Getwd()
 	log.Printf("working dir: %s", dir)
@@ -60,7 +46,12 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
 
 	// Init Controler et Registre
 	register := registre.Registre{}
-	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
+	if isBootstrap == 0 {
+		registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
+	} else {
+		log.Printf("Bootstrap pour le site %s\n", siteID)
+	}
+
 	registre.InitialiseRegistre(siteID, &register)
 
 	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors)
@@ -68,7 +59,7 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int) {
 	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors)
 
 	go listenStdEntry(eventQueue)
-	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register)
+	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register, isBootstrap)
 	go listenLocalTorrentOutput(eventQueue, networkControler.Controler)
 	go siteLogic(processingChan, eventQueue, networkControler)
 
@@ -124,7 +115,7 @@ func listenStdEntry(queue chan<- Event) {
 }
 
 // interface web
-func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Controller, register *registre.Registre) {
+func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Controller, register *registre.Registre, isBoostrap int) {
 	onMsg := func(msg string) {
 		queue <- Event{
 			Type:   ReadMessage,
@@ -132,7 +123,7 @@ func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Con
 			Data:   msg,
 		}
 	}
-	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register)
+	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register, isBoostrap)
 }
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {

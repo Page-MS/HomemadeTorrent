@@ -5,14 +5,14 @@ PROJECT_DIR="../src/homemadeTorrent"
 BIN_DIR="../bin"
 FIFO_DIR="/tmp/network_fifos"
 
+node="node8"
+
 # Nettoyage et setup des dossiers
 mkdir -p "$LOG_DIR"
 mkdir -p "$FIFO_DIR"
-rm -f "$FIFO_DIR"/in* "$FIFO_DIR"/out*
-find "$BIN_DIR" -mindepth 1 -not -path "$BIN_DIR/baseFiles*" -exec rm -rf {} + 2>/dev/null
+rm -f "$FIFO_DIR"/in_$node "$FIFO_DIR"/out_$node
+rm -rf "$BIN_DIR"/$node
 
-# Liste des noeuds et du nombre de voisins
-node="node8"
 
 # Création des named pipes
 mkfifo "$FIFO_DIR/in_$node"

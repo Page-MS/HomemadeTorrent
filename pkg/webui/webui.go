@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 )
 
@@ -20,9 +21,22 @@ type WebUI struct {
 	Register  *registre.Registre
 }
 
-func StartWebUI(siteID string, index int, onMessage func(string), register *registre.Registre) {
-	// Offset port by index so each site has a unique endpoint
-	port := fmt.Sprintf("808%d", index)
+func StartWebUI(siteID string, index int, onMessage func(string), register *registre.Registre, isBootstrap int) {
+	var port string
+
+	if isBootstrap == 1 {
+		// Laisser le système choisir un port libre
+		listener, err := net.Listen("tcp", ":0")
+		if err != nil {
+			log.Printf("[WEBUI] Impossible de trouver un port libre : %v", err)
+			return
+		}
+		port = fmt.Sprintf("%d", listener.Addr().(*net.TCPAddr).Port)
+		listener.Close() // On libère pour que ListenAndServe puisse l'utiliser
+	} else {
+		// Offset port by index so each site has a unique endpoint
+		port = fmt.Sprintf("808%d", index)
+	}
 
 	ui := WebUI{
 		SiteID:    siteID,
