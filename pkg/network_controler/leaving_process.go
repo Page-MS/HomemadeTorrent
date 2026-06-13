@@ -3,12 +3,16 @@ package networkcontroler
 import (
 	"HomemadeTorrent/pkg/parser"
 	"log"
+	"os"
+	"os/exec"
 	"strings"
+	"time"
 )
 
 const (
 	RECEIVE_NODE_LEAVING  = "RECEIVE_NODE_LEAVING"
 	START_LEAVING_PROCESS = "START_LEAVING_PROCESS"
+	TEST_ENFANTS          = "TEST_ENFANTS"
 )
 
 func (nc *NetworkControler) GetChildrenIDsString() string {
@@ -35,10 +39,18 @@ func (nc *NetworkControler) StartLeavingProcess() string {
 	}
 	encoded, err := parser.Encode(msg)
 	if err != nil {
-		log.Printf("[ELECTION] Erreur encodage Wave : %v\n", err)
+		log.Printf("[LEAVING] erreur d'encodage : %v\n", err)
 		return ""
 	}
+
+	go endProgram() // On quitte le site après avoir envoyé le message à notre parent
 	return encoded
+}
+
+func endProgram() {
+	time.Sleep(10 * time.Second)
+	log.Println("[LEAVING] Au revoir !")
+	os.Exit(0) // On attend 5 seconde pour que le message soit bien envoyé avant de quitter le site
 }
 
 func (nc *NetworkControler) ReceiveLeavingProcess(pMsg parser.Message) {
@@ -59,6 +71,13 @@ func (nc *NetworkControler) ReceiveLeavingProcess(pMsg parser.Message) {
 		// On ajoute les nouveaux enfants à notre liste d'enfants
 		for id, address := range mapNouveauxEnfants {
 			nc.NeighborIDsAndAdresses[id] = address
+			cmd := exec.Command("tee", "-a", nc.NeighborIDsAndAdresses[id])
+			err := cmd.Run()
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
 		}
 		log.Printf("[NETWORK CONTROLER][ReceiveLeavingProcess] Nouvelle list d'enfants\n")
 		nc.LogNeighbors()
