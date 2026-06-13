@@ -32,7 +32,7 @@ func (c *Controller) handleDistributedFile(pMsg parser.Message) parser.Message {
 	case distributed_file.ACK:
 		isReady = c.DistFile.AckFromNetwork(msgCtrl)
 	case distributed_file.LOCAL_SC_REQUEST:
-		responseMsg = c.DistFile.SCRequestFromBaseApp(pMsg.Dest)
+		responseMsg = c.DistFile.SCRequestFromBaseApp()
 	case distributed_file.LOCAL_SC_LIBERATION:
 		responseMsg = c.DistFile.SCStopFromBaseApp()
 	}
@@ -66,7 +66,7 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 		c.Snapshot.IsInitiator = false
 		log.Printf("[SNAPSHOT] Reset reçu de %s : Retour au BLANC.", pMsg.Sender)
 
-		pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+		pMsg.Dest = BROADCAST
 		pMsg.Vect = c.Vector.GetCopy()
 		pMsg.Stamp = c.Lamport.GetValue()
 		return pMsg
@@ -92,7 +92,8 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 
 			// On prépare le Marker pour le voisin suivant
 			pMsg.Sender = initiatorID // On garde l'ID du vrai initiateur
-			pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+			//pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+			pMsg.Dest = BROADCAST
 			pMsg.Color = string(snapshot.Red)
 
 			return pMsg // On envoie le Marker au suivant
@@ -105,7 +106,8 @@ func (c *Controller) handleSnapshot(pMsg parser.Message) parser.Message {
 				return parser.Message{} // L'initiateur arrête la boucle
 			} else {
 				log.Printf("[SNAPSHOT] Marker reçu alors que déjà rouge. Propagation simple.")
-				pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+				//pMsg.Dest = c.getIdFromSIteIndex(c.getSuccessorIndex())
+				pMsg.Dest = BROADCAST
 				return pMsg // On laisse le Marker finir son tour d'anneau
 			}
 		}

@@ -20,7 +20,7 @@ find "$TARGET" -mindepth 1 -path "$TARGET/$KEEP" -o -path "$TARGET/$KEEP/*" -pru
 # Construction de la liste des membres
 IDS=""
 for i in $(seq 1 $N); do
-    IDS="$IDS $i"
+  IDS="$IDS $i"
 done
 
 echo "Logs dirigés vers : $LOG_DIR"
@@ -28,7 +28,7 @@ echo "Logs dirigés vers : $LOG_DIR"
 # On lance l'anneau
 (
   cat "$FIFO" | \
-  go run -C "$PROJECT_DIR" . 1 $IDS 2> "$LOG_DIR/1.log" | \
-  go run -C "$PROJECT_DIR" . 2 $IDS 2> "$LOG_DIR/2.log" | \
-  go run -C "$PROJECT_DIR" . 3 $IDS 2> "$LOG_DIR/3.log" > "$FIFO"
+  go run -C "$PROJECT_DIR" . 1 0 $IDS 2> "$LOG_DIR/1.log" | \
+  go run -C "$PROJECT_DIR" . 2 0 $IDS 2> "$LOG_DIR/2.log" | \
+  go run -C "$PROJECT_DIR" . 3 0 $IDS 2> "$LOG_DIR/3.log" > "$FIFO"
 )

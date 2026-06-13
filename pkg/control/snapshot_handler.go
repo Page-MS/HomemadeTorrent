@@ -45,7 +45,6 @@ func (c *Controller) triggerLocalSnapshot(isInitiator bool, initiatorID string) 
 
 	// Si on est l'initiateur, on initialise le comptage
 	if isInitiator {
-		//c.Snapshot.Bilan++ //TODO : Debug prépost (a enlever)
 		c.Snapshot.NbEtatsAttendus = len(c.NetworkDirectory.IndexToID) - 1
 		c.Snapshot.NbMsgAttendus = c.Snapshot.Bilan
 		c.Snapshot.CollectedStates = []snapshot.SiteState{}
@@ -184,7 +183,8 @@ func (c *Controller) finalizeSnapshot() parser.Message {
 		Sender: c.SiteID,
 		Stamp:  c.Lamport.GetValue(),
 		Vect:   c.Vector.GetCopy(),
-		Dest:   c.getIdFromSIteIndex(c.getSuccessorIndex()),
+		//Dest:   c.getIdFromSIteIndex(c.getSuccessorIndex())
+		Dest: BROADCAST,
 	}
 	log.Println("[SNAPSHOT] Système prêt pour une nouvelle sauvegarde.")
 	return resetMsg

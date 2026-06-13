@@ -2,6 +2,7 @@ package torrentlogic
 
 import (
 	"HomemadeTorrent/pkg/registre"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"math/rand"
@@ -228,7 +229,6 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 	// We take a random peer in the list of peers to not always ask the same peer first
 	peersWithPart := registre.GetPeersHavingPart(fileID, partID)
 	peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
-	log.Printf("\n[TORRENT] Asking peer %s for part %d of file %s", peerToAsk, partID, fileID)
 	var partTransferWg sync.WaitGroup
 	transferSuccess, err := AskPeerForPart(transferID, peerToAsk, fileID, partID, currentSite, registre, &partTransferWg, incomingMessagesChannel, outputMessagesChannel)
 	if err != nil {
@@ -246,27 +246,6 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 		if err != nil {
 			log.Printf("\n[TORRENT] Error while updating register to remove peer %s as owner of part %d of file %s: %v", peerToAsk, partID, fileID, err)
 			return err
-		}
-		// We ask for a SC
-		SendMessageToPeer(AskingFromSC, false, currentSite, transferID, transferID, 0, fileID, 0, "", outputMessagesChannel)
-		select {
-		case message := <-incomingMessagesChannel:
-			log.Printf("\n[TORRENT] Message reçu %v: \n", message)
-			// If this is the authorziation for a critical section
-			if message.MessageType == StartSC {
-				log.Printf("\n[TORRENT] Received authorization to start critical section for file %s, updating register of the others", fileID)
-				err = SendRegisterUpdateToPeer(currentSite, transferID, "-1", fileID, 0, outputMessagesChannel, registre)
-				if err != nil {
-					log.Printf("\n[TORRENT] Error while sending register update to peers for file : %v", err)
-					return err
-				}
-				// We send the message announcing we have finished with our critical section
-				SendMessageToPeer(DoneWithSC, false, currentSite, transferID, "-1", 0, fileID, 0, "", outputMessagesChannel)
-
-			} else {
-				err = fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
-				return err
-			}
 		}
 
 		peerToAsk := peersWithPart[rand.Intn(len(peersWithPart))]
@@ -369,7 +348,7 @@ func SendMessageToPeer(messageType MessageType, deleteMe bool, senderID string, 
 		PartID:               partID,
 		Content:              content,
 	}
-	log.Printf("\n[TORRENT] Message details:\n Type: %s\n Sender: %s\n Target: %s\n TransferID: %s\n FileID: %s\n PartID: %d\n Content: %s\n", messageName[message.MessageType], message.SenderID, message.TargetID, message.TransferID, message.FileID, message.PartID, message.Content)
+	//log.Printf("\n[TORRENT] Message details:\n Type: %s\n Sender: %s\n Target: %s\n TransferID: %s\n FileID: %s\n PartID: %d\n Content: %s\n", messageName[message.MessageType], message.SenderID, message.TargetID, message.TransferID, message.FileID, message.PartID, message.Content)
 	outputMessagesChannel <- message
 
 }
@@ -396,8 +375,9 @@ func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID 
 	fileSize := uint(fileInfo.Size())
 	filePartContent := make([]byte, fileSize)
 	file.Read(filePartContent)
+	encoded := base64.StdEncoding.EncodeToString(filePartContent)
 	// We send the content of the part to the peer
-	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, transferID, peerID, ReceivingContent, fileID, partID, string(filePartContent), outputMessagesChannel)
+	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, transferID, peerID, ReceivingContent, fileID, partID, encoded, outputMessagesChannel)
 
 	return nil
 }
@@ -440,5 +420,32 @@ func HandleRegisterUpdateMessage(msg Message, reg *registre.Registre) error {
 	}
 	reg.Merge(remoteReg)
 	log.Printf("[TORRENT] Update Register from remote successfuly\n")
+	return nil
+}
+
+func AddNewUserToTorrentLogic(currentSite string, newUserID string, reg *registre.Registre, newUserDirectory string, outputMessagesChannel chan<- Message, scChan <-chan Message) error {
+	log.Printf("\n[TORRENT] Debut update du registre suite à un nouvel arrivant\n")
+	SendMessageToPeer(AskingFromSC, false, currentSite, "", currentSite, 0, "", 0, "", outputMessagesChannel)
+
+	select {
+	case message := <-scChan:
+		// If this is the authorziation for a critical section
+		if message.MessageType == StartSC {
+			log.Printf("\n[TORRENT] Received authorization to start critical section\n")
+			// Update registre
+			reg.AddNewUserToRegister(newUserID, newUserDirectory)
+			err := SendRegisterUpdateToPeer(currentSite, "", "-1", "", 0, outputMessagesChannel, reg)
+			if err != nil {
+				log.Printf("\n[TORRENT] Error while sending register update to peers : %v", err)
+				return err
+			}
+			// We send the message announcing we have finished with our critical section
+			SendMessageToPeer(DoneWithSC, false, currentSite, "", currentSite, 0, "", 0, "", outputMessagesChannel)
+
+		} else {
+			err := fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
+			return err
+		}
+	}
 	return nil
 }

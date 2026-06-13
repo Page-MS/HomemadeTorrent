@@ -34,7 +34,17 @@ func (vc *VectorClock) Update(remoteVector []int) {
 	log.Printf("[DEBUG-VECT] RECEPTION - Avant Update: %v | Remote reçu: %v | MonIndex: %d", vc.vector, remoteVector, vc.siteIndex)
 
 	if len(remoteVector) != len(vc.vector) {
-		log.Printf("[DEBUG-VECT] WARNING : Taille incohérente ! Local=%d, Remote=%d", len(vc.vector), len(remoteVector))
+		log.Printf("[DEBUG-VECT] WARNING : Taille incohérente ! Local=%d, Remote=%d. Résolution automatique...", len(vc.vector), len(remoteVector))
+
+		if len(remoteVector) < len(vc.vector) {
+			// Le message vient de l'ancienne topologie : on crée un vecteur à la nouvelle taille rempli de 0
+			extended := make([]int, len(vc.vector))
+			copy(extended, remoteVector) // On copie les anciennes valeurs dedans
+			remoteVector = extended
+		} else {
+			// Si jamais le remote est plus grand, on le tronque à notre taille locale
+			remoteVector = remoteVector[:len(vc.vector)]
+		}
 	}
 
 	// Verification de la taille des vecteurs
@@ -57,4 +67,12 @@ func (vc *VectorClock) GetCopy() []int {
 	copyVec := make([]int, len(vc.vector))
 	copy(copyVec, vc.vector)
 	return copyVec
+}
+
+// UpdateLayout remplace le vecteur et l'index (indispensable lors d'une restructuration du réseau)
+func (vc *VectorClock) UpdateLayout(newVector []int, newSiteIndex int) {
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+	vc.vector = newVector
+	vc.siteIndex = newSiteIndex
 }

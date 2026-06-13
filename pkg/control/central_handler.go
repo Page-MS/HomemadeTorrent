@@ -23,10 +23,9 @@ type Controller struct {
 	Vector                *clock.VectorClock
 	DistFile              *distributed_file.DistributedFile
 	Reg                   *registre.Registre
-	SiteID                string          // nom du site
-	SiteIndex             int             // index du site
-	SeenMessages          map[string]bool // Messages déjà vu par le site
-	NetworkDirectory      SiteDirectory   // Correspondance SiteId et index
+	SiteID                string        // nom du site
+	SiteIndex             int           // index du site
+	NetworkDirectory      SiteDirectory // Correspondance SiteId et index
 	Snapshot              *snapshot.Snapshot
 	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
 	OutputTorrentChan     chan torrentlogic.Message
@@ -59,7 +58,6 @@ func NewController(
 		DistFile:         distributed_file.GetNewDistributedFile(len(allSiteIDs), dir.IDToIndex[siteID], clk),
 		SiteID:           siteID,
 		SiteIndex:        dir.IDToIndex[siteID],
-		SeenMessages:     make(map[string]bool),
 		NetworkDirectory: dir,
 		Snapshot: &snapshot.Snapshot{
 			MyColor:     snapshot.White,
@@ -106,29 +104,6 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 	}
 
 	log.Printf("[CONTROLLER][NETWORK] Message reçut site %s | Sender: %s | Dest: %s\n", c.SiteID, pMsg.Sender, pMsg.Dest)
-
-	// ================ Routage anneau ====================
-	processLocal, forward := c.routeMessage(pMsg)
-
-	if processLocal && c.SeenMessages[pMsg.Id] {
-		if pMsg.Action == "MARKER" && c.Snapshot.IsInitiator {
-			log.Printf("[SNAPSHOT] Marker revenu à l'initiateur (%s). Fin de la propagation.", c.SiteID)
-			return nil
-		}
-		log.Printf("[ROUTAGE] Message déjà traité (%s), ignoré", pMsg.Id)
-		return responses
-	}
-
-	if processLocal {
-		c.SeenMessages[pMsg.Id] = true
-	}
-
-	if forward {
-		responses = append(responses, raw)
-	}
-	if !processLocal {
-		return responses
-	}
 
 	// ============= synchro des horloges ==============
 	c.Lamport.Update(pMsg.Stamp)
@@ -303,35 +278,4 @@ func (c *Controller) getIdFromSIteIndex(index int) string {
 		return BROADCAST
 	}
 	return c.NetworkDirectory.IndexToID[index]
-}
-
-// routeMessage gère le routage d'un anneau
-func (c *Controller) routeMessage(pMsg parser.Message) (processLocal bool, forward bool) {
-	// Vérifier que les informations pour le routage sont présentes
-	if len(pMsg.Sender) == 0 || len(pMsg.Dest) == 0 {
-		log.Printf("[ROUTAGE] Impossible de router ce message incomplet (pas de destinataire ou d'envoyeur), ignoré\n")
-		return false, false
-	}
-
-	// Cas Message pour soi meme
-	if pMsg.Sender == c.SiteID {
-		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré\n")
-		return false, false
-	}
-
-	// Cas broadcast
-	if pMsg.Dest == BROADCAST {
-		log.Printf("[ROUTAGE] Broadcast reçu sur site %s", c.SiteID)
-		return true, true
-	}
-
-	// Cas message pour ce site
-	if pMsg.Dest == c.SiteID {
-		log.Printf("[ROUTAGE] Message pour ce site (%s)", c.SiteID)
-		return true, false
-	}
-
-	// Sinon → forward uniquement
-	log.Printf("[ROUTAGE] Message pour %s, forward depuis %s", pMsg.Dest, c.SiteID)
-	return false, true
 }

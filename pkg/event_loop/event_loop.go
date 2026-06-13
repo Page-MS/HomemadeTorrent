@@ -3,6 +3,7 @@ package event_loop
 import (
 	"HomemadeTorrent/pkg/control"
 	"HomemadeTorrent/pkg/delay"
+	networkcontroler "HomemadeTorrent/pkg/network_controler"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
 	"HomemadeTorrent/pkg/webui"
@@ -35,7 +36,11 @@ type Event struct {
 	Data   string
 }
 
-func Start(allSiteIDs []string, siteID string) {
+func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int) {
+	// Debug
+	dir, _ := os.Getwd()
+	log.Printf("working dir: %s", dir)
+
 	// Channels
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
@@ -45,26 +50,24 @@ func Start(allSiteIDs []string, siteID string) {
 
 	// Init Controler et Registre
 	register := registre.Registre{}
-	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
+	if isBootstrap == 0 {
+		registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
+	} else {
+		log.Printf("Bootstrap pour le site %s\n", siteID)
+	}
+
 	registre.InitialiseRegistre(siteID, &register)
+	register.AddNewUserToRegister("Patrick", "../../bin/")
+	register.PrintRegister()
 
-	controler := control.NewController(
-		siteID,
-		allSiteIDs,
-		&register,
-		&delayHandler,
-	)
+	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors)
 
-	go listenStdEntry(eventQueue, &delayHandler)
-	go listenLocalTorrentOutput(eventQueue, controler)
-	ui := webui.StartWebUI(controler, func(msg string) {
-		eventQueue <- Event{
-			Type:   ReadMessage,
-			Source: FromLocalUser,
-			Data:   msg,
-		}
-	})
-	go siteLogic(processingChan, eventQueue, controler, ui.SendRegisterState)
+	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors)
+
+	go listenStdEntry(eventQueue)
+	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register, isBootstrap)
+	go listenLocalTorrentOutput(eventQueue, networkControler.Controler)
+	go siteLogic(processingChan, eventQueue, networkControler)
 
 	log.Printf("[EVENT_LOOP] START\n")
 
@@ -121,6 +124,18 @@ func listenStdEntry(
 	}
 }
 
+// interface web
+func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Controller, register *registre.Registre, isBoostrap int) {
+	onMsg := func(msg string) {
+		queue <- Event{
+			Type:   ReadMessage,
+			Source: FromLocalUser,
+			Data:   msg,
+		}
+	}
+	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register, isBoostrap)
+}
+
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
 	for msg := range c.OutputTorrentChan {
 		ctrlMsg, err := c.TorrentMessageToParserMessage(msg)
@@ -148,7 +163,7 @@ func write(msg string) {
 	}
 }
 
-func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controller, onUpdate func()) {
+func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler.NetworkControler, onUpdate func()) {
 	for event := range input {
 		// Découpage par double saut de ligne pour séparer les messages collés
 		rawMessages := strings.Split(event.Data, "\n\n")
@@ -162,9 +177,9 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, c *control.Controlle
 			var responses []string
 			switch event.Source {
 			case FromNetwork:
-				responses = c.HandleIncomingFromNetwork(cleanRaw)
+				responses = nc.HandleIncomingFromNetwork(cleanRaw)
 			case FromLocalUser:
-				responses = c.HandleIncomingFromLocal(cleanRaw)
+				responses = nc.HandleIncomingFromLocal(cleanRaw)
 			}
 
 			for _, r := range responses {
