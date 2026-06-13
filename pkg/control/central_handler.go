@@ -1,6 +1,7 @@
 package control
 
 import (
+	"HomemadeTorrent/pkg/delay"
 	"HomemadeTorrent/pkg/snapshot"
 	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
@@ -29,6 +30,7 @@ type Controller struct {
 	InputTorrentTransfers map[string]chan torrentlogic.Message // Map des inputs des transfers torrent en cour
 	OutputTorrentChan     chan torrentlogic.Message
 	TorrentScChan         chan torrentlogic.Message
+	Delay                 *delay.Delay
 }
 
 const BROADCAST string = "-1"
@@ -40,7 +42,13 @@ var torrentMessagesMap = map[torrentlogic.MessageType]struct{}{
 }
 
 // NewController initialise un nouveau dispatcher central
-func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Controller {
+func NewController(
+	siteID string,
+	allSiteIDs []string,
+	r *registre.Registre,
+	delay *delay.Delay,
+) *Controller {
+
 	clk := &clock.LamportClock{}
 	dir := NewSiteDirectory(allSiteIDs)
 
@@ -60,6 +68,7 @@ func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Co
 		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
 		TorrentScChan:         make(chan torrentlogic.Message),
 		Reg:                   r,
+		Delay:                 delay,
 	}
 }
 
@@ -242,6 +251,20 @@ func (c *Controller) HandleIncomingFromLocal(raw string) []string {
 
 	responses = append(responses, encodedMsg)
 	return responses
+}
+
+func (c *Controller) UpdateDelay(del delay.Delay) {
+	if del.AppliationDelay_ms < 0 {
+		del.AppliationDelay_ms = c.Delay.AppliationDelay_ms
+	}
+	if del.SnapshotDelay_ms < 0 {
+		del.SnapshotDelay_ms = c.Delay.SnapshotDelay_ms
+	}
+	if del.NetworkDelay_ms < 0 {
+		del.NetworkDelay_ms = c.Delay.NetworkDelay_ms
+	}
+	c.Delay = &del
+	log.Printf("[CONTROLLER] Delay mis à jour: %+v\n", c.Delay)
 }
 
 // getSiteIndexFromID fais la correspondance entre nom de site et index
