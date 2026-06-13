@@ -4,6 +4,7 @@ import (
 	"HomemadeTorrent/pkg/control"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
+	"HomemadeTorrent/pkg/delay"
 	"log"
 
 	"github.com/google/uuid"
@@ -26,9 +27,13 @@ type NetworkControler struct {
 	PeersWaitingToJoin []string
 }
 
-func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int) *NetworkControler {
+func NewNetworkControler(siteID string,
+	allSiteIDs []string, r *registre.Registre,
+	nbNeighbors int,
+	delay delay.Delay,
+) *NetworkControler {
 	return &NetworkControler{
-		Controler:          control.NewController(siteID, allSiteIDs, r),
+		Controler:          control.NewController(siteID, allSiteIDs, r, &delay),
 		SeenMessages:       make(map[string]bool),
 		SiteID:             siteID,
 		NbNeighbors:        nbNeighbors,

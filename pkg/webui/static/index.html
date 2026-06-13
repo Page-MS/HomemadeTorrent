@@ -91,6 +91,29 @@
                     </button>
                 </form>
 
+                <!-- Delay config -->
+                <h2 class="text-lg mt-4 border-b border-dashed border-stone-300 pb-1 mb-3">
+                    Configure Delays
+                </h2>
+                <div class="flex flex-col space-y-2">
+                    <label for="">
+                        <span>Application Delay (ms):</span>
+                    </label>
+                    <input type="number" x-model="delay.applicationDelay_ms" class="border border-stone-400 p-2">
+                    <label for="">
+                        <span>Snapshot Delay (ms):</span>
+                    </label>
+                    <input type="number" x-model="delay.snapshotDelay_ms" class="border border-stone-400 p-2">
+                    <label for="">
+                        <span>Network Delay (ms):</span>
+                    </label>
+                    <input type="number" x-model="delay.networkDelay_ms" class="border border-stone-400 p-2">
+                    <button @click="updateDelay()"
+                            class="bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
+                        Update Delays
+                    </button>
+                </div>
+
                 <!-- Status Messages -->
                 <template x-if="statusMessage">
                     <div :class="'mt-3 p-2 border font-bold text-sm ' + (statusIsError ? 'border-red-600 bg-red-50 text-red-700' : 'border-green-600 bg-green-50 text-green-700')"
@@ -153,26 +176,96 @@
                 isLoading: false,
                 logs: [],
                 logCounter: 0,
-                updateInterval: null,
+                socket: null,
+                reconnectTimeout: null,
+                shouldReconnect: true,
+                delay: {
+                    applicationDelay_ms: 0,
+                    snapshotDelay_ms: 0,
+                    networkDelay_ms: 0
+                },
 
                 async init() {
-                    await this.refreshFiles();
-                    this.updateInterval = setInterval(() => this.refreshFiles(), 10000);
+                    this.connectSocket();
                     this.addLog('UI initialized for {{.SiteID}}');
                 },
 
-                async refreshFiles() {
-                    this.isLoading = true;
-                    try {
-                        const response = await fetch('/api/info');
-                        if (!response.ok) throw new Error('Failed to fetch');
-                        const data = await response.json();
-                        this.files = data.Files || [];
-                    } catch (err) {
-                        console.error('Error refreshing files:', err);
-                        this.showStatus('Failed to load files', true);
+                connectSocket() {
+                    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+                        return;
                     }
-                    this.isLoading = false;
+
+                    this.isLoading = true;
+                    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+                    this.socket = new WebSocket(`${protocol}${window.location.host}/ws`);
+
+                    this.socket.onopen = () => {
+                        this.isLoading = false;
+                        this.addLog('WebSocket connected');
+                    };
+
+                    this.socket.onmessage = (event) => {
+                        try {
+                            const msg = JSON.parse(event.data);
+                            this.handleWSMessage(msg);
+                        } catch (err) {
+                            console.error('Error parsing websocket message:', err);
+                            this.showStatus('Invalid websocket payload', true);
+                        }
+                    };
+
+                    this.socket.onerror = () => {
+                        this.isLoading = false;
+                        this.showStatus('WebSocket error', true);
+                    };
+
+                    this.socket.onclose = () => {
+                        this.isLoading = false;
+                        this.addLog('WebSocket disconnected');
+                        if (!this.shouldReconnect) {
+                            return;
+                        }
+                        if (this.reconnectTimeout) {
+                            clearTimeout(this.reconnectTimeout);
+                        }
+                        this.reconnectTimeout = setTimeout(() => this.connectSocket(), 2000);
+                    };
+                },
+
+                handleWSMessage(msg) {
+                    switch (msg.type) {
+                        case 'register-changed':
+                            this.files = msg.data.Files || [];
+                            this.siteId = msg.data.SiteID || this.siteId;
+                            this.isLoading = false;
+                            this.delay = {
+                                applicationDelay_ms: msg.data.Delay?.applicationDelay_ms || 0,
+                                snapshotDelay_ms: msg.data.Delay?.snapshotDelay_ms || 0,
+                                networkDelay_ms: msg.data.Delay?.networkDelay_ms || 0
+                            };
+                            this.addLog('Register updated');
+                            break;
+                        default:
+                            console.log('Unknown event type:', msg.type);
+                    }
+                },
+
+                requestState() {
+                    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                        this.connectSocket();
+                        return;
+                    }
+
+                    try {
+                        this.socket.send(JSON.stringify({ type: 'refresh' }));
+                    } catch (err) {
+                        console.error('Error requesting state:', err);
+                        this.showStatus('Failed to request register state', true);
+                    }
+                },
+
+                async refreshFiles() {
+                    this.requestState();
                 },
 
                 hasLocalFile(file) {
@@ -184,22 +277,20 @@
                     
                     this.isSending = true;
                     try {
-                        const formData = new URLSearchParams();
-                        formData.append('message', msg);
-
-                        const response = await fetch('/api/send', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: formData
-                        });
-
-                        if (response.ok) {
-                            this.showStatus('Message sent successfully!', false);
-                            this.message = '';
-                            this.addLog('Message sent');
-                        } else {
-                            this.showStatus('Failed to send message: ' + response.statusText, true);
+                        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                            this.showStatus('Not connected', true);
+                            this.isSending = false;
+                            return;
                         }
+
+                        const wsMsg = {
+                            type: "action",
+                            message: msg
+                        };
+                        this.socket.send(JSON.stringify(wsMsg));
+                        this.showStatus('Message sent successfully!', false);
+                        this.message = '';
+                        this.addLog('Message sent');
                     } catch (err) {
                         console.error('Error sending message:', err);
                         this.showStatus('Network error while sending', true);
@@ -211,21 +302,19 @@
                 async sendHook(msg) {
                     this.isSending = true;
                     try {
-                        const formData = new URLSearchParams();
-                        formData.append('message', msg);
-
-                        const response = await fetch('/api/send', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: formData
-                        });
-
-                        if (response.ok) {
-                            this.showStatus('Hook sent successfully!', false);
-                            this.addLog('Hook sent');
-                        } else {
-                            this.showStatus('Failed to send hook', true);
+                        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+                            this.showStatus('Not connected', true);
+                            this.isSending = false;
+                            return;
                         }
+
+                        const wsMsg = {
+                            type: "action",
+                            message: msg
+                        };
+                        this.socket.send(JSON.stringify(wsMsg));
+                        this.showStatus('Hook sent successfully!', false);
+                        this.addLog('Hook sent');
                     } catch (err) {
                         console.error('Error sending hook:', err);
                         this.showStatus('Network error', true);
@@ -242,6 +331,18 @@ PAYLOAD_LEN:${payload.length-1}
 ${payload}
 `;
                     await this.sendMessage(msg);
+                },
+
+                async updateDelay() {
+                    this.socket.send(JSON.stringify({
+                        type: "update-delay",
+                        delay: {
+                            applicationDelay_ms: parseInt(this.delay.applicationDelay_ms) || -1,
+                            snapshotDelay_ms: parseInt(this.delay.snapshotDelay_ms) || -1,
+                            networkDelay_ms: parseInt(this.delay.networkDelay_ms) || -1
+                        }
+                    }));
+                    this.showStatus('Delay updated', false);
                 },
 
                 showStatus(msg, isError) {
@@ -263,8 +364,12 @@ ${payload}
                 },
 
                 destroy() {
-                    if (this.updateInterval) {
-                        clearInterval(this.updateInterval);
+                    this.shouldReconnect = false;
+                    if (this.reconnectTimeout) {
+                        clearTimeout(this.reconnectTimeout);
+                    }
+                    if (this.socket) {
+                        this.socket.close();
                     }
                 }
             };
