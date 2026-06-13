@@ -2,6 +2,7 @@ package event_loop
 
 import (
 	"HomemadeTorrent/pkg/control"
+	"HomemadeTorrent/pkg/delay"
 	networkcontroler "HomemadeTorrent/pkg/network_controler"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
@@ -42,31 +43,37 @@ func StartBootstrap(siteID string) {
 	//Start(allSiteIDs, siteID)
 }
 
-func Start(allSiteIDs []string, siteID string, nbNeighbors int, siteAddress string) {
+func Start(allSiteIDs []string, siteID string, nbNeighbors int, siteAddress string, isBootstrap int) {
 	// Debug
 	dir, _ := os.Getwd()
 	log.Printf("working dir: %s", dir)
 
 	// Channels
-	eventQueue := make(chan Event, 100)
-	processingChan := make(chan Event, 100)
+	eventQueue := make(chan Event, 10000)
+	processingChan := make(chan Event, 10000)
+
+	// Delay Handling
+	delayHandler := delay.NewDelay()
 
 	// Init Controler et Registre
 	register := registre.Registre{}
-	registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
-	registre.InitialiseRegistre(siteID, &register)
-	register.AddNewUserToRegister("Patrick", "../../bin/")
-	register.PrintRegister()
+	if isBootstrap == 0 {
+		registre.MakeInitialHardcodedRegister(&register, "../../bin/baseFiles", "../../bin/parts", allSiteIDs)
+	} else {
+		log.Printf("Bootstrap pour le site %s\n", siteID)
+	}
 
-	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors, siteAddress)
+	registre.InitialiseRegistre(siteID, &register)
+
+	networkControler := networkcontroler.NewNetworkControler(
+		siteID, allSiteIDs, &register, nbNeighbors, delayHandler, siteAddress)
 
 	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d, SiteAddress: %s\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors, networkControler.SiteAddress)
 
-	go listenStdEntry(eventQueue)
-	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register)
+	go listenStdEntry(eventQueue, &delayHandler)
+	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register, isBootstrap)
 	go listenLocalTorrentOutput(eventQueue, networkControler.Controler)
-	go siteLogic(processingChan, eventQueue, networkControler)
-	// We send a message to our direct neighbors to get their adresses and names
+	go siteLogic(processingChan, eventQueue, networkControler, func() {})
 
 	log.Printf("[EVENT_LOOP] START\n")
 
@@ -92,7 +99,10 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, siteAddress stri
 	}
 }
 
-func listenStdEntry(queue chan<- Event) {
+func listenStdEntry(
+	queue chan<- Event,
+	delay *delay.Delay,
+) {
 	//fmt.Println("DEBUG: Le lecteur clavier est bien lancé")
 	scanner := bufio.NewScanner(os.Stdin)
 	const maxCapacity = 10 * 1024 * 1024 // 10 Mo pour pouvoir envoyer le registre
@@ -109,6 +119,7 @@ func listenStdEntry(queue chan<- Event) {
 
 				log.Printf("[EVENT_LOOP] Message réseau lu en entrée: %s\n", msg)
 
+				delay.WaitNetworkDelay()
 				queue <- Event{
 					Type:   ReadMessage,
 					Source: FromNetwork,
@@ -116,6 +127,33 @@ func listenStdEntry(queue chan<- Event) {
 				}
 			}
 			continue
+		}
+
+		// Détection d'un ACTION: au milieu d'une ligne (fusion de deux messages)
+		if buffer.Len() > 0 {
+			if idx := strings.Index(line, "ACTION:"); idx > 0 {
+				// On termine le message en cours avec ce qu'il y a avant ACTION:
+				buffer.WriteString(line[:idx] + "\n")
+				msg := buffer.String()
+				buffer.Reset()
+				log.Printf("[EVENT_LOOP] WARN: fusion détectée, envoi du message en cours: %s\n", msg)
+				queue <- Event{
+					Type:   ReadMessage,
+					Source: FromNetwork,
+					Data:   msg,
+				}
+				// Le nouveau message commence à ACTION:
+				line = line[idx:]
+			}
+		} else {
+			// Si le buffer est vide, c'est la première ligne d'un nouveau message
+			if buffer.Len() == 0 {
+				if idx := strings.Index(line, "ACTION:"); idx > 0 {
+					garbage := line[:idx]
+					line = line[idx:]
+					log.Printf("[EVENT_LOOP] WARN: résidu détecté avant ACTION, supprimé: %q\n", garbage)
+				}
+			}
 		}
 		// On rajoute un \n manuellement pour reconstruire le message proprement
 		buffer.WriteString(line + "\n")
@@ -127,7 +165,7 @@ func listenStdEntry(queue chan<- Event) {
 }
 
 // interface web
-func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Controller, register *registre.Registre) {
+func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Controller, register *registre.Registre, isBoostrap int) {
 	onMsg := func(msg string) {
 		queue <- Event{
 			Type:   ReadMessage,
@@ -135,19 +173,22 @@ func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Con
 			Data:   msg,
 		}
 	}
-	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register)
+	webui.StartWebUI(controler, onMsg, isBoostrap)
 }
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
 	for msg := range c.OutputTorrentChan {
+		log.Printf("[TORRENT_PART2] La part de partID %d envoyée est : binaire avec event %d!\n", msg.PartID, msg.TransferRelatedEvent)
 		ctrlMsg, err := c.TorrentMessageToParserMessage(msg)
 		if err != nil {
 			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
 		}
+		log.Printf("[TORRENT_PART3] La part de ID %s encodé est %s :  !\n", ctrlMsg.Id, ctrlMsg.Payload)
 		strMsg, err := parser.Encode(ctrlMsg)
 		if err != nil {
 			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
 		}
+		log.Printf("[TORRENT_PART4] La part de ID %s string est %s :  !\n", ctrlMsg.Id, strMsg)
 
 		queue <- Event{
 			Type:   ReadMessage,
@@ -165,7 +206,7 @@ func write(msg string) {
 	}
 }
 
-func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler.NetworkControler) {
+func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler.NetworkControler, onUpdate func()) {
 	for event := range input {
 		// Découpage par double saut de ligne pour séparer les messages collés
 		rawMessages := strings.Split(event.Data, "\n\n")
@@ -190,6 +231,10 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler
 					Data: r,
 				}
 			}
+		}
+
+		if onUpdate != nil {
+			onUpdate()
 		}
 	}
 }

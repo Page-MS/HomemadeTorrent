@@ -27,17 +27,20 @@ type NetworkControler struct {
 	PeersWaitingToJoin []string
 
 	NeighborIDsAndAdresses map[string]string // Map des enfants et leurs adresses (pour gérer le départ)
+	SiteAddress            string
 }
 
 func NewNetworkControler(siteID string,
 	allSiteIDs []string, r *registre.Registre,
 	nbNeighbors int,
 	delay delay.Delay,
+	siteAddress string,
 ) *NetworkControler {
 	return &NetworkControler{
 		Controler:              control.NewController(siteID, allSiteIDs, r, &delay),
 		SeenMessages:           make(map[string]bool),
 		SiteID:                 siteID,
+		SiteAddress:            siteAddress,
 		NbNeighbors:            nbNeighbors,
 		Waves:                  make(map[string]*WaveState),
 		PeersWaitingToJoin:     make([]string, 0),
