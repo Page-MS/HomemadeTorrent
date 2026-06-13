@@ -2,6 +2,7 @@ package event_loop
 
 import (
 	"HomemadeTorrent/pkg/control"
+	"HomemadeTorrent/pkg/delay"
 	networkcontroler "HomemadeTorrent/pkg/network_controler"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
@@ -44,6 +45,9 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int)
 	eventQueue := make(chan Event, 100)
 	processingChan := make(chan Event, 100)
 
+	// Delay Handling
+	delayHandler := delay.NewDelay()
+
 	// Init Controler et Registre
 	register := registre.Registre{}
 	if isBootstrap == 0 {
@@ -82,7 +86,10 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int)
 	}
 }
 
-func listenStdEntry(queue chan<- Event) {
+func listenStdEntry(
+	queue chan<- Event,
+	delay *delay.Delay,
+) {
 	//fmt.Println("DEBUG: Le lecteur clavier est bien lancé")
 	scanner := bufio.NewScanner(os.Stdin)
 	const maxCapacity = 10 * 1024 * 1024 // 10 Mo pour pouvoir envoyer le registre
@@ -99,6 +106,7 @@ func listenStdEntry(queue chan<- Event) {
 
 				log.Printf("[EVENT_LOOP] Message réseau lu en entrée: %s\n", msg)
 
+				delay.WaitNetworkDelay()
 				queue <- Event{
 					Type:   ReadMessage,
 					Source: FromNetwork,
@@ -155,7 +163,7 @@ func write(msg string) {
 	}
 }
 
-func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler.NetworkControler) {
+func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler.NetworkControler, onUpdate func()) {
 	for event := range input {
 		// Découpage par double saut de ligne pour séparer les messages collés
 		rawMessages := strings.Split(event.Data, "\n\n")
@@ -180,6 +188,10 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler
 					Data: r,
 				}
 			}
+		}
+
+		if onUpdate != nil {
+			onUpdate()
 		}
 	}
 }
