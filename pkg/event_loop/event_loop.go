@@ -60,14 +60,15 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int)
 	register.AddNewUserToRegister("Patrick", "../../bin/")
 	register.PrintRegister()
 
-	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors)
+	networkControler := networkcontroler.NewNetworkControler(
+		siteID, allSiteIDs, &register, nbNeighbors, delayHandler)
 
 	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors)
 
-	go listenStdEntry(eventQueue)
+	go listenStdEntry(eventQueue, &delayHandler)
 	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register, isBootstrap)
 	go listenLocalTorrentOutput(eventQueue, networkControler.Controler)
-	go siteLogic(processingChan, eventQueue, networkControler)
+	go siteLogic(processingChan, eventQueue, networkControler, func() {})
 
 	log.Printf("[EVENT_LOOP] START\n")
 
@@ -133,7 +134,7 @@ func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Con
 			Data:   msg,
 		}
 	}
-	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register, isBoostrap)
+	webui.StartWebUI(controler, onMsg, isBoostrap)
 }
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
