@@ -49,7 +49,7 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 
 	// ================ Routage ====================
 	if nc.SeenMessages[pMsg.Id] {
-		log.Printf("[NETWORK CONTROLER] Message déjà vu, ignoré\n")
+		log.Printf("[NETWORK CONTROLER] Message déjà vu, ignoré (ID: %s)\n", pMsg.Id)
 		return nil
 	}
 
@@ -140,7 +140,7 @@ func (nc *NetworkControler) routeMessage(pMsg parser.Message) (processLocal bool
 
 	// Ne jamais re-émettre ses propres messages
 	if pMsg.Sender == nc.SiteID {
-		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré\n")
+		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré (ID: %s)\n", pMsg.Id)
 		return false, false
 	}
 

@@ -41,8 +41,8 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int)
 	log.Printf("working dir: %s", dir)
 
 	// Channels
-	eventQueue := make(chan Event, 100)
-	processingChan := make(chan Event, 100)
+	eventQueue := make(chan Event, 10000)
+	processingChan := make(chan Event, 10000)
 
 	// Init Controler et Registre
 	register := registre.Registre{}
@@ -53,8 +53,6 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int)
 	}
 
 	registre.InitialiseRegistre(siteID, &register)
-	register.AddNewUserToRegister("Patrick", "../../bin/")
-	register.PrintRegister()
 
 	networkControler := networkcontroler.NewNetworkControler(siteID, allSiteIDs, &register, nbNeighbors)
 
@@ -107,6 +105,33 @@ func listenStdEntry(queue chan<- Event) {
 			}
 			continue
 		}
+
+		// Détection d'un ACTION: au milieu d'une ligne (fusion de deux messages)
+		if buffer.Len() > 0 {
+			if idx := strings.Index(line, "ACTION:"); idx > 0 {
+				// On termine le message en cours avec ce qu'il y a avant ACTION:
+				buffer.WriteString(line[:idx] + "\n")
+				msg := buffer.String()
+				buffer.Reset()
+				log.Printf("[EVENT_LOOP] WARN: fusion détectée, envoi du message en cours: %s\n", msg)
+				queue <- Event{
+					Type:   ReadMessage,
+					Source: FromNetwork,
+					Data:   msg,
+				}
+				// Le nouveau message commence à ACTION:
+				line = line[idx:]
+			}
+		} else {
+			// Si le buffer est vide, c'est la première ligne d'un nouveau message
+			if buffer.Len() == 0 {
+				if idx := strings.Index(line, "ACTION:"); idx > 0 {
+					garbage := line[:idx]
+					line = line[idx:]
+					log.Printf("[EVENT_LOOP] WARN: résidu détecté avant ACTION, supprimé: %q\n", garbage)
+				}
+			}
+		}
 		// On rajoute un \n manuellement pour reconstruire le message proprement
 		buffer.WriteString(line + "\n")
 	}
@@ -130,14 +155,17 @@ func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Con
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
 	for msg := range c.OutputTorrentChan {
+		log.Printf("[TORRENT_PART2] La part de partID %d envoyée est : binaire avec event %d!\n", msg.PartID, msg.TransferRelatedEvent)
 		ctrlMsg, err := c.TorrentMessageToParserMessage(msg)
 		if err != nil {
 			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
 		}
+		log.Printf("[TORRENT_PART3] La part de ID %s encodé est %s :  !\n", ctrlMsg.Id, ctrlMsg.Payload)
 		strMsg, err := parser.Encode(ctrlMsg)
 		if err != nil {
 			log.Printf("[EVENT_LOOP] Erreur de lecture local torrent output: %v\n", err)
 		}
+		log.Printf("[TORRENT_PART4] La part de ID %s string est %s :  !\n", ctrlMsg.Id, strMsg)
 
 		queue <- Event{
 			Type:   ReadMessage,

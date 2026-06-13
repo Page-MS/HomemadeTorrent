@@ -57,7 +57,7 @@ func NewController(siteID string, allSiteIDs []string, r *registre.Registre) *Co
 			IsInitiator: false,
 		},
 		InputTorrentTransfers: make(map[string]chan torrentlogic.Message),
-		OutputTorrentChan:     make(chan torrentlogic.Message, 100), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
+		OutputTorrentChan:     make(chan torrentlogic.Message, 10000), // Goulot d'étranglement sur la capacité d'envoi (augmenter si besoin)
 		TorrentScChan:         make(chan torrentlogic.Message),
 		Reg:                   r,
 	}
@@ -140,7 +140,7 @@ func (c *Controller) HandleIncomingFromNetwork(raw string) []string {
 
 	// ==================== Logique dispatcher ======================
 
-	log.Printf("[CONTROLLER][NETWORK] Action: %s | de: %s | Lamport: %d\n", pMsg.Action, pMsg.Sender, c.Lamport.GetValue())
+	log.Printf("[CONTROLLER][NETWORK] Action: %s | de: %s | ID: %s\n", pMsg.Action, pMsg.Sender, pMsg.Id)
 
 	// Redirection vers le service aproprié
 	var returnMsg parser.Message

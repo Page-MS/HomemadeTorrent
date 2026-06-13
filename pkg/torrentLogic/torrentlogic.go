@@ -2,7 +2,6 @@ package torrentlogic
 
 import (
 	"HomemadeTorrent/pkg/registre"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"math/rand"
@@ -271,31 +270,41 @@ func StartTransferForPart(transferID string, fileID string, partID uint, current
 
 // Ask a peer for a file part, timeout if unsuccessful
 func AskPeerForPart(transferID string, peerID string, fileID string, partID uint, currentSite string, reg *registre.Registre, wg *sync.WaitGroup, incomingMessagesChannel <-chan Message, outputMessagesChannel chan<- Message) (success bool, err error) {
-	log.Print("\n[TORRENT] Asking peer ", peerID, " for part ", partID, " of file ", fileID)
+	log.Printf("\n[TORRENT] Asking peer %s for part %d of file %s (transferID: %s)", peerID, partID, fileID, transferID)
 	// Send message asking for shasum
 	SendMessageToPeer(AskingForShasum, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
+	log.Printf("\n[TORRENT] Sent AskingForShasum to peer %s for part %d of file %s — waiting for response...", peerID, partID, fileID)
 	// Wait for response (shasum) or timeout
 	select {
 	case msg := <-incomingMessagesChannel:
+		log.Printf("\n[TORRENT] Received message while waiting for shasum — type: %v, event: %v, fileID: %s, partID: %d (expected fileID: %s, partID: %d)", msg.MessageType, msg.TransferRelatedEvent, msg.FileID, msg.PartID, fileID, partID)
 		if msg.TransferRelatedEvent != ReceivingShasum || msg.PartID != partID || msg.FileID != fileID {
+			log.Printf("\n[TORRENT] Unexpected message received while waiting for shasum: %+v", msg)
 			return false, fmt.Errorf("unexpected message: %+v", msg)
 		}
 		shasum := msg.Content
+		log.Printf("\n[TORRENT] Received shasum for part %d of file %s from peer %s: %s", partID, fileID, peerID, shasum)
 		// Check if the shasum match our register
 		err = HandlePeerRespondingWithShasum(currentSite, peerID, fileID, partID, shasum, reg)
 		if err != nil {
+			log.Printf("\n[TORRENT] Shasum mismatch for part %d of file %s from peer %s: %v", partID, fileID, peerID, err)
 			return false, err
 		}
+		log.Printf("\n[TORRENT] Shasum validated for part %d of file %s", partID, fileID)
 	}
 	// Send message asking for content
 	SendMessageToPeer(AskingForContent, false, currentSite, transferID, peerID, None, fileID, partID, "", outputMessagesChannel)
+	log.Printf("\n[TORRENT] Sent AskingForContent to peer %s for part %d of file %s — waiting for content...", peerID, partID, fileID)
 	// We wait until we receive the content of the file (hopefully...)
 	select {
 	case msg := <-incomingMessagesChannel:
+		log.Printf("\n[TORRENT] Received message while waiting for content — type: %v, event: %v, fileID: %s, partID: %d (expected fileID: %s, partID: %d)", msg.MessageType, msg.TransferRelatedEvent, msg.FileID, msg.PartID, fileID, partID)
 		if msg.TransferRelatedEvent != ReceivingContent || msg.PartID != partID || msg.FileID != fileID {
+			log.Printf("\n[TORRENT] Unexpected message received while waiting for content: %+v", msg)
 			return false, fmt.Errorf("unexpected message: %+v", msg)
 		}
 		content := msg.Content
+		log.Printf("\n[TORRENT] Received content for part %d of file %s from peer %s (encoded length: %d chars)", partID, fileID, peerID, len(content))
 		file := reg.GetFileByID(fileID)
 		if file == nil {
 			return false, fmt.Errorf("file with ID %s not found in register", fileID)
@@ -305,15 +314,16 @@ func AskPeerForPart(transferID string, peerID string, fileID string, partID uint
 			fileNameWithoutExt = file.Name[:idx]
 		}
 		partFilePath := fmt.Sprintf("%s/%s/parts/%s_part%d", BIN_PATH, currentSite, fileNameWithoutExt, partID-1)
+		log.Printf("\n[TORRENT] Saving part %d of file %s to path: %s", partID, file.Name, partFilePath)
 		if err := os.MkdirAll(fmt.Sprintf("%s/%s/parts", BIN_PATH, currentSite), 0755); err != nil {
 			return false, fmt.Errorf("could not create parts directory: %v", err)
 		}
 		err = os.WriteFile(partFilePath, []byte(content), 0644)
 		if err != nil {
-			log.Printf("\n[TORRENT] Error while writing part: %v", err)
+			log.Printf("\n[TORRENT] Error while writing part %d of file %s to %s: %v", partID, file.Name, partFilePath, err)
 			return false, err
 		}
-		log.Printf("\n[TORRENT] Saved part file: %s\n", partFilePath)
+		log.Printf("\n[TORRENT] Successfully saved part %d of file %s to: %s", partID, file.Name, partFilePath)
 		return true, nil
 	}
 }
@@ -374,10 +384,17 @@ func HandlePeerAskingForPartContent(currentSiteID string, peerID string, fileID 
 	}
 	fileSize := uint(fileInfo.Size())
 	filePartContent := make([]byte, fileSize)
-	file.Read(filePartContent)
-	encoded := base64.StdEncoding.EncodeToString(filePartContent)
+	sizeRed, err := file.Read(filePartContent)
+	if err != nil {
+		log.Printf("[READING_PART] Erreur lecture part : fileID %s, partID %d !\n", fileID, partID)
+	}
+	if sizeRed == 0 {
+		log.Printf("[READING_PART] La partie lise est vide : fileID %s, partID %d\n", fileID, partID)
+	}
+
+	log.Printf("[TORRENT_PART] La part est envoyé : partID %d !\n", partID)
 	// We send the content of the part to the peer
-	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, transferID, peerID, ReceivingContent, fileID, partID, encoded, outputMessagesChannel)
+	SendMessageToPeer(TransferRelatedMessage, false, currentSiteID, transferID, peerID, ReceivingContent, fileID, partID, string(filePartContent), outputMessagesChannel)
 
 	return nil
 }

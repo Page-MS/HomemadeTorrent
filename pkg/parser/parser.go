@@ -118,9 +118,15 @@ func Decode(raw_data string) (Message, error) {
 					return Message{}, errors.New("Impossible to payload_len")
 				}
 				msg.Payload_len = val
+				if i+1 >= len(lines) {
+					return Message{}, fmt.Errorf("PAYLOAD_LEN annonce %d octets mais il n'y a pas de ligne suivante (message tronqué ?)", val)
+				}
 				msg.Payload = lines[i+1]
 				if len(msg.Payload) <= 0 {
 					return Message{}, errors.New("Provided payload len but no payload")
+				}
+				if len(msg.Payload) != val {
+					return Message{}, fmt.Errorf("PAYLOAD_LEN annonce %d octets mais payload fait %d octets (message tronqué ou corrompu ?)", val, len(msg.Payload))
 				}
 
 				return msg, nil // return now

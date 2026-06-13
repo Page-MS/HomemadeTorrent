@@ -238,7 +238,7 @@
                     const payload = `FileID;${fileId}\n`;
                     const msg = `ACTION:StartTransfers
 DEST:${this.siteId}
-PAYLOAD_LEN:${payload.length}
+PAYLOAD_LEN:${payload.length-1}
 ${payload}
 `;
                     await this.sendMessage(msg);

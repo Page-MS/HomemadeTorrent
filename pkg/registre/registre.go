@@ -12,7 +12,7 @@ import (
 )
 
 // 16 KiB file part size (except the last one)
-const FILE_PART_SIZE uint = 16 * 1024
+const FILE_PART_SIZE uint = 64 * 1024
 
 const BIN_PATH_FROM_MAIN = "../../bin"
 
