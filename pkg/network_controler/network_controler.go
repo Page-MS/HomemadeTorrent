@@ -81,7 +81,7 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 	case ELECTED:
 		nc.HandleElected(pMsg)
 	case RELEASE_ELECTION:
-		msg := nc.HandleReleaseElected(pMsg)
+		msg := nc.HandleReleaseElected()
 		responses = append(responses, msg)
 	case ASKING_TO_JOIN_NETWORK:
 		msg := nc.HandlePeerAskingToJoin(pMsg)

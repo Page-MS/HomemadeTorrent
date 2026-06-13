@@ -127,7 +127,7 @@ func (nc *NetworkControler) HandleElectionResult() []string {
 		}
 
 		// out new site -> in site
-		err = AddFifoToLink(newSitefifoOutPath, fifoInPath, true)
+		err = AddFifoToLink(newSitefifoOutPath, fifoInPath, false)
 		if err != nil {
 			log.Printf("[ARRIVE] Erreur lors de link entre fifo out %s et fifo in %s : %v\n", newSitefifoOutPath, fifoInPath, err)
 			result = append(result, newSiteName)
@@ -242,11 +242,15 @@ func AddFifoToLink(fifoPath string, newFifo string, ignoreFirst bool) error {
 	newInFifos := make([]string, 0)
 	if ignoreFirst {
 		// Remplacer la boucle par le fifo in
-		newInFifos = append(newInFifos, newFifo)
+		log.Printf("  [IGNORE_FIRST=true] Suppression du premier fifo %s\n", info.InFifos[0])
+		newInFifos = append(info.InFifos[1:], newFifo)
+
 	} else {
 		// Recréer le pipeline avec le nouveau fifo en plus
+		log.Printf("  [IGNORE_FIRST=false] Ajout de %s aux destinations existantes %v\n", newFifo, info.InFifos)
 		newInFifos = append(info.InFifos, newFifo)
 	}
+	log.Printf("  Nouvelles destinations tee: %v\n", newInFifos)
 
 	// Construire la commande: cat src | tee dst1 dst2 ... > /dev/null
 	teeArgs := append(newInFifos, "> /dev/null") // on va gérer /dev/null via la commande

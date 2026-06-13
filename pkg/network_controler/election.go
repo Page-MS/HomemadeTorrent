@@ -134,10 +134,11 @@ func (nc *NetworkControler) HandleElected(pMsg parser.Message) {
 }
 
 // HandleReleaseElected traite la libération broadcast de l'élection.
-func (nc *NetworkControler) HandleReleaseElected(pMsg parser.Message) string {
+func (nc *NetworkControler) HandleReleaseElected() string {
 	nc.ElectedID = ""
+	nc.Election = nil
 	log.Printf("[ELECTION] Libération, nouvelle election possible\n")
-	if len(nc.PeersWaitingToJoin) != 0 {
+	if len(nc.PeersWaitingToJoin) > 1 {
 		return nc.StartElection()
 	}
 	return ""

@@ -440,7 +440,7 @@ func AddNewUserToTorrentLogic(currentSite string, newUserID string, reg *registr
 				return err
 			}
 			// We send the message announcing we have finished with our critical section
-			SendMessageToPeer(DoneWithSC, false, currentSite, "", "-1", 0, "", 0, "", outputMessagesChannel)
+			SendMessageToPeer(DoneWithSC, false, currentSite, "", currentSite, 0, "", 0, "", outputMessagesChannel)
 
 		} else {
 			err := fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")

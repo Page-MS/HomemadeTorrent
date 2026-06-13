@@ -65,7 +65,6 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) []string {
 	nc.Controler.NetworkDirectory.IndexToID = newIDs
 	nc.Controler.NetworkDirectory.IDToIndex = newIDToIndex
 	nc.Controler.SiteIndex = newMyIndex
-	//nc.Controler.Reg.AddNewUserToRegister(newSiteID, newSiteID)
 
 	log.Printf("[ADD_USER] Annuaire mis à jour. Le site '%s' est officiellement reconnu.\n", newSiteID)
 
@@ -105,6 +104,21 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) []string {
 			log.Printf("[ADD_USER] Erreur encodage ADD_USER_CONFIRM : %v\n", err)
 			return nil
 		}
+		responses = append(responses, encodedMsg)
+
+		// Création du message de confirmation pour prévenir le reste du réseau
+		nc.HandleReleaseElected()
+		msgRelease := parser.Message{
+			Sender: nc.SiteID,
+			Dest:   BROADCAST,
+			Action: RELEASE_ELECTION,
+		}
+
+		encodedMsg, err = parser.Encode(msgRelease)
+		if err != nil {
+			log.Printf("[ADD_USER] Erreur encodage RELEASE_ELECTION : %v\n", err)
+			return nil
+		}
 
 		return append(responses, encodedMsg)
 	}
@@ -114,7 +128,11 @@ func (nc *NetworkControler) AddUser(newSiteID string, isLeader bool) []string {
 }
 
 func (nc *NetworkControler) UpdateListe(pMsg parser.Message) {
+	log.Printf("[UPDATE_LISTE] Mise à jour du réseau, payload: %q", pMsg.Payload)
+
 	peersList := strings.Split(pMsg.Payload, ",")
+	log.Printf("[UPDATE_LISTE] Nouveaux pairs (%d): %v", len(peersList), peersList)
+	log.Printf("[UPDATE_LISTE] Ancienne liste (%d): %v", len(nc.Controler.NetworkDirectory.IndexToID), nc.Controler.NetworkDirectory.IndexToID)
 
 	// Création de la nouvelle liste d'IDs
 	nc.Controler.NetworkDirectory.IndexToID = peersList
@@ -125,21 +143,25 @@ func (nc *NetworkControler) UpdateListe(pMsg parser.Message) {
 		newIDToIndex[id] = i
 	}
 	nc.Controler.NetworkDirectory.IDToIndex = newIDToIndex
+	log.Printf("[UPDATE_LISTE] Nouvelle map IDToIndex: %v", newIDToIndex)
 
 	// Horloge vectorielle
+	oldSiteIndex := nc.Controler.SiteIndex
+	newSiteIndex := newIDToIndex[nc.SiteID]
 	newVector := make([]int, len(peersList))
-	nc.Controler.Vector.UpdateLayout(newVector, newIDToIndex[nc.SiteID])
+	log.Printf("[UPDATE_LISTE] Vecteur: taille %d -> %d | SiteIndex: %d -> %d", len(nc.Controler.Vector.GetCopy()), len(newVector), oldSiteIndex, newSiteIndex)
+	nc.Controler.Vector.UpdateLayout(newVector, newSiteIndex)
 
 	// File repartie
 	newTab := make([]distributed_file.TabEntry, len(peersList))
-	// On initialise toutes les cases par défaut (comme dans GetNewDistributedFile)
 	for i := range newTab {
 		newTab[i] = distributed_file.TabEntry{
 			Type: distributed_file.SC_LIBERATION,
 			Date: 0,
 		}
 	}
-	nc.Controler.DistFile.UpdateLayout(newTab, newIDToIndex[nc.SiteID])
+	nc.Controler.DistFile.UpdateLayout(newTab, newSiteIndex)
 
-	nc.Controler.SiteIndex = newIDToIndex[nc.SiteID]
+	nc.Controler.SiteIndex = newSiteIndex
+	log.Printf("[UPDATE_LISTE] Mise à jour terminée — SiteID=%q, SiteIndex=%d", nc.SiteID, nc.Controler.SiteIndex)
 }
