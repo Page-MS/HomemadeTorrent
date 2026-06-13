@@ -29,6 +29,6 @@ func main() {
 	if bootstrap == "1" {
 		event_loop.StartBootstrap(siteID)
 	} else {
-		event_loop.Start(allSiteIDs, siteID, nbNeighbors, siteAddress)
+		event_loop.Start(allSiteIDs, siteID, nbNeighbors, bootstrap, siteAddress)
 	}
 }

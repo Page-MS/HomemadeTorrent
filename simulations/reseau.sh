@@ -41,6 +41,7 @@ done
 sleep 1
 
 # Topologie
+set -m
 # 1 -> 2, 3
 cat "$FIFO_DIR/out_node1" | tee "$FIFO_DIR/in_node2" "$FIFO_DIR/in_node3" > /dev/null &
 # 2 -> 1, 4, 5
@@ -55,6 +56,7 @@ cat "$FIFO_DIR/out_node5" | tee "$FIFO_DIR/in_node2" "$FIFO_DIR/in_node4" > /dev
 cat "$FIFO_DIR/out_node6" | tee "$FIFO_DIR/in_node3" "$FIFO_DIR/in_node7" > /dev/null &
 # 7 -> 4, 6
 cat "$FIFO_DIR/out_node7" | tee "$FIFO_DIR/in_node4" "$FIFO_DIR/in_node6" > /dev/null &
+set +m
 
 echo "Réseau démarré. Ctrl+C pour arrêter."
 

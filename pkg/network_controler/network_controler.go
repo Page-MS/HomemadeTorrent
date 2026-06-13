@@ -2,6 +2,7 @@ package networkcontroler
 
 import (
 	"HomemadeTorrent/pkg/control"
+	"HomemadeTorrent/pkg/delay"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
 	"log"
@@ -13,26 +14,34 @@ const BROADCAST = control.BROADCAST
 const BROADCAST_NEIGHBORS = "-2"
 
 type NetworkControler struct {
-	Controler              *control.Controller
-	SeenMessages           map[string]bool // Messages déjà vu par le site
-	SiteID                 string
-	SiteAddress            string
-	NbNeighbors            int
+	Controler    *control.Controller
+	SeenMessages map[string]bool // Messages déjà vu par le site
+	SiteID       string
+
+	NbNeighbors int
+	Waves       map[string]*WaveState
+
+	Election  *ElectionState
+	ElectedID string
+
+	PeersWaitingToJoin []string
+
 	NeighborIDsAndAdresses map[string]string // Map des enfants et leurs adresses (pour gérer le départ)
-	Waves                  map[string]*WaveState
-	Election               *ElectionState
-	ElectedID              string
 }
 
-func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int, siteAddress string) *NetworkControler {
+func NewNetworkControler(siteID string,
+	allSiteIDs []string, r *registre.Registre,
+	nbNeighbors int,
+	delay delay.Delay,
+) *NetworkControler {
 	return &NetworkControler{
-		Controler:              control.NewController(siteID, allSiteIDs, r),
+		Controler:              control.NewController(siteID, allSiteIDs, r, &delay),
 		SeenMessages:           make(map[string]bool),
 		SiteID:                 siteID,
-		SiteAddress:            siteAddress,
 		NbNeighbors:            nbNeighbors,
-		NeighborIDsAndAdresses: make(map[string]string),
 		Waves:                  make(map[string]*WaveState),
+		PeersWaitingToJoin:     make([]string, 0),
+		NeighborIDsAndAdresses: make(map[string]string),
 	}
 }
 
@@ -48,7 +57,7 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 
 	// ================ Routage ====================
 	if nc.SeenMessages[pMsg.Id] {
-		log.Printf("[NETWORK CONTROLER] Message déjà vu, ignoré\n")
+		log.Printf("[NETWORK CONTROLER] Message déjà vu, ignoré (ID: %s)\n", pMsg.Id)
 		return nil
 	}
 
@@ -76,7 +85,7 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, msg)
 	case ECHO_ELECTION:
 		msg := nc.HandleElectionEcho(pMsg)
-		responses = append(responses, msg)
+		responses = append(responses, msg...)
 	case ELECTED:
 		nc.HandleElected(pMsg)
 	case I_M_NEIGHBOR:
@@ -86,6 +95,20 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, msg)
 	case RECEIVE_NODE_LEAVING:
 		nc.ReceiveLeavingProcess(pMsg)
+	case RELEASE_ELECTION:
+		msg := nc.HandleReleaseElected()
+		responses = append(responses, msg)
+	case ASKING_TO_JOIN_NETWORK:
+		msg := nc.HandlePeerAskingToJoin(pMsg)
+		responses = append(responses, msg)
+	case ADD_USER_CONFIRM:
+		// Si on est le site ajouté, on doit pas se rajouter nous meme à nous meme
+		if pMsg.Payload != nc.SiteID {
+			nc.AddUser(pMsg.Payload, false)
+		}
+	case UPDATE_LISTE:
+		nc.UpdateListe(pMsg)
+
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromNetwork(raw)
@@ -120,6 +143,8 @@ func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
 	case START_LEAVING_PROCESS:
 		msg := nc.StartLeavingProcess()
 		responses = append(responses, msg)
+	case START_ASKING_TO_JOIN_NETWORK:
+		nc.AskPeerToJoinNetwork(pMsg)
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromLocal(raw)
@@ -137,7 +162,7 @@ func (nc *NetworkControler) routeMessage(pMsg parser.Message) (processLocal bool
 
 	// Ne jamais re-émettre ses propres messages
 	if pMsg.Sender == nc.SiteID {
-		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré\n")
+		log.Printf("[ROUTAGE] Message envoyé par soi-même, ignoré (ID: %s)\n", pMsg.Id)
 		return false, false
 	}
 
