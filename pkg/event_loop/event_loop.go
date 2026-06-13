@@ -64,11 +64,10 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int)
 
 	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors)
 
-	go listenStdEntry(eventQueue)
+	go listenStdEntry(eventQueue, &delayHandler)
 	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register, isBootstrap)
 	go listenLocalTorrentOutput(eventQueue, networkControler.Controler)
-	go siteLogic(processingChan, eventQueue, networkControler)
-
+	go siteLogic(processingChan, eventQueue, networkControler, func() {})
 	log.Printf("[EVENT_LOOP] START\n")
 
 	// Event loop (bloquante)
@@ -87,7 +86,7 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int)
 }
 
 func listenStdEntry(
-	queue chan<- Event,
+	queue chan Event,
 	delay *delay.Delay,
 ) {
 	//fmt.Println("DEBUG: Le lecteur clavier est bien lancé")
@@ -133,7 +132,7 @@ func listenUserUIInput(queue chan<- Event, siteID string, controler *control.Con
 			Data:   msg,
 		}
 	}
-	webui.StartWebUI(siteID, controler.SiteIndex, onMsg, register, isBoostrap)
+	webui.StartWebUI(controler, onMsg, isBoostrap)
 }
 
 func listenLocalTorrentOutput(queue chan<- Event, c *control.Controller) {
@@ -163,7 +162,10 @@ func write(msg string) {
 	}
 }
 
-func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler.NetworkControler, onUpdate func()) {
+func siteLogic(input chan Event, eventQueue chan Event,
+	nc *networkcontroler.NetworkControler,
+	onUpdate func(),
+) {
 	for event := range input {
 		// Découpage par double saut de ligne pour séparer les messages collés
 		rawMessages := strings.Split(event.Data, "\n\n")

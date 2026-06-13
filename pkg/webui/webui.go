@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 
@@ -65,9 +66,23 @@ var wsUpgrader = websocket.Upgrader{
 func StartWebUI(
 	c *control.Controller,
 	onMessage func(string),
+	isBootstrap int,
 ) *WebUI {
 	// Offset port by index so each site has a unique endpoint
-	port := fmt.Sprintf("808%d", c.SiteIndex)
+	var port string
+
+	if isBootstrap == 1 {
+		// Laisser le système choisir un port libre
+		listener, err := net.Listen("tcp", ":0")
+		if err != nil {
+			log.Fatalf("[WEBUI] Impossible de trouver un port libre : %v", err)
+		}
+		port = fmt.Sprintf("%d", listener.Addr().(*net.TCPAddr).Port)
+		listener.Close() // On libère pour que ListenAndServe puisse l'utiliser
+	} else {
+		// Offset port by index so each site has a unique endpoint
+		port = fmt.Sprintf("808%d", c.SiteIndex)
+	}
 
 	ui := &WebUI{
 		SiteID:    c.SiteID,
