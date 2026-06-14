@@ -349,7 +349,7 @@ ${payload}
 				async joinNetwork() {
 					const msg = `ACTION:START_ASKING_TO_JOIN_NETWORK
 DEST:${this.siteId}
-PAYLOAD_LEN:${this.node.tojoin.length-1}
+PAYLOAD_LEN:${this.node.tojoin.length}
 ${this.node.tojoin}
 `;
 					this.node.tojoin = '';
