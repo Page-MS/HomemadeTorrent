@@ -3,26 +3,45 @@ package networkcontroler
 import (
 	"HomemadeTorrent/pkg/parser"
 	"log"
+	"strconv"
 )
 
 // Actions utilisées pour l'initialisation de la recherche de voisins
 const (
-	INIT_FIND_NEIGHBORS = "INIT_FIND_NEIGHBORS"
-	I_M_NEIGHBOR        = "I_M_NEIGHBOR"
+	INIT_FIND_NEIGHBORS    = "INIT_FIND_NEIGHBORS"
+	I_M_NEIGHBOR           = "I_M_NEIGHBOR"
+	START_NEIGHBORS_SEARCH = "START_NEIGHBORS_SEARCH"
 )
 
-func (nc *NetworkControler) InitFindNeighbors() string {
+func (nc *NetworkControler) InitFindNeighbors(isLeaver bool) []string {
+	var response []string
+
+	if isLeaver {
+		msgBroadcast := parser.Message{
+			Sender: nc.SiteID,
+			Dest:   BROADCAST,
+			Action: START_NEIGHBORS_SEARCH,
+		}
+		encodedBroadcast, err := parser.Encode(msgBroadcast)
+		if err != nil {
+			log.Printf("[NETWORK CONTROLER][FIND NEIGHBORS] Erreur encodage: %v\n", err)
+			return nil
+		}
+		response = append(response, encodedBroadcast)
+	}
+
 	msg := parser.Message{
-		Sender: nc.SiteID,
-		Dest:   BROADCAST_NEIGHBORS,
-		Action: INIT_FIND_NEIGHBORS,
+		Sender:  nc.SiteID,
+		Dest:    BROADCAST_NEIGHBORS,
+		Action:  INIT_FIND_NEIGHBORS,
+		Payload: strconv.FormatBool(isLeaver),
 	}
 	encoded, err := parser.Encode(msg)
 	if err != nil {
 		log.Printf("[NETWORK CONTROLER][FIND NEIGHBORS] Erreur encodage: %v\n", err)
-		return ""
+		return nil
 	}
-	return encoded
+	return append(response, encoded)
 }
 
 func (nc *NetworkControler) HandleFindNeighbors(pMsg parser.Message) string {
@@ -31,7 +50,7 @@ func (nc *NetworkControler) HandleFindNeighbors(pMsg parser.Message) string {
 		Sender:  nc.SiteID,
 		Dest:    pMsg.Sender,
 		Action:  I_M_NEIGHBOR,
-		Payload: nc.SiteAddress, //on envoie à notre parent notre adresse
+		Payload: pMsg.Payload,
 	}
 	encoded, err := parser.Encode(msg)
 	if err != nil {
@@ -41,15 +60,20 @@ func (nc *NetworkControler) HandleFindNeighbors(pMsg parser.Message) string {
 	return encoded
 }
 
-func (nc *NetworkControler) HandleIMNeighborMessage(pMsg parser.Message) {
+func (nc *NetworkControler) HandleIMNeighborMessage(pMsg parser.Message) bool {
 	voisinID := pMsg.Sender
-	voisinAddress := pMsg.Payload
+	voisinAddress := "/tmp/network_fifos/in_" + voisinID
 	if nc.NeighborIDsAndAdresses == nil {
 		nc.NeighborIDsAndAdresses = make(map[string]string)
 	}
 	nc.NeighborIDsAndAdresses[voisinID] = voisinAddress
 	log.Printf("[NETWORK CONTROLER][HandleIMNeighborMessage] Nouveau voisin ajouté : %s à l'adresse %s\n", voisinID, voisinAddress)
 	nc.LogNeighbors()
+
+	if len(nc.NeighborIDsAndAdresses) == nc.NbNeighbors {
+		return true
+	}
+	return false
 }
 
 // Juste pour les tests

@@ -24,7 +24,7 @@ type ElectionState struct {
 }
 
 // StartElection démarre une élection : ce site se déclare candidat.
-func (nc *NetworkControler) StartElection() string {
+func (nc *NetworkControler) StartElection(electionGoal string) string {
 	if nc.Election != nil && nc.Election.EluID <= nc.SiteID {
 		log.Printf("[ELECTION] Une meilleure élection est déjà en cours (élu courant=%s)\n", nc.Election.EluID)
 		return ""
@@ -33,6 +33,8 @@ func (nc *NetworkControler) StartElection() string {
 		log.Printf("[ELECTION] L'election est toujours detenue par l'élu %s\n", nc.ElectedID)
 		return ""
 	}
+
+	nc.CurrentElectionGoal = electionGoal
 
 	nc.Election = &ElectionState{
 		EluID:      nc.SiteID,
@@ -139,7 +141,12 @@ func (nc *NetworkControler) HandleReleaseElected() string {
 	nc.Election = nil
 	log.Printf("[ELECTION] Libération, nouvelle election possible\n")
 	if len(nc.PeersWaitingToJoin) > 1 {
-		return nc.StartElection()
+		log.Printf("[ELECTION] Un pair attend pour rejoindre: nouvelle election\n")
+		return nc.StartElection(JOINING)
+	}
+	if len(nc.PeersWaitingToLeave) > 1 {
+		log.Printf("[ELECTION] Un pair attend pour quitter: nouvelle election\n")
+		return nc.StartElection(LEAVING)
 	}
 	return ""
 }

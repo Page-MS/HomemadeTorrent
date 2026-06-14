@@ -309,6 +309,23 @@ func (r *Registre) AddNewUserToRegister(username string, userDirectory string) b
 	return true
 }
 
+func (r *Registre) RemoveUserFromRegister(peerID string) {
+	// Retirer de la liste des pairs
+	if slices.Contains(r.Peers, peerID) {
+		r.Peers = slices.Delete(r.Peers, slices.Index(r.Peers, peerID), slices.Index(r.Peers, peerID)+1)
+	}
+
+	// Retirer de tous les fichiers et parts
+	for _, file := range r.Files {
+		r.RemovePeerHavingFile(peerID, file.ID)
+		for _, part := range file.FileParts {
+			r.RemovePeerHavingPart(peerID, file.ID, part.FilePartID)
+		}
+	}
+
+	log.Printf("[REGISTRE] Pair %s retiré du registre\n", peerID)
+}
+
 // Return the data structure of the files in the register
 func (r *Registre) GetFileList() []File {
 	if len(r.Files) == 0 {

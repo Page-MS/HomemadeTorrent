@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -20,6 +21,7 @@ type EventType int
 const (
 	ReadMessage EventType = iota
 	WriteMessage
+	WriteMessageFinal
 )
 
 type EventSource int
@@ -36,14 +38,7 @@ type Event struct {
 	Data   string
 }
 
-func StartBootstrap(siteID string) {
-	log.Printf("Bootstrap pour le site %s\n", siteID)
-	// We contact the bootstrap node which we have the access to the fifo
-	//write("BOOTSTRAP " + siteID)
-	//Start(allSiteIDs, siteID)
-}
-
-func Start(allSiteIDs []string, siteID string, nbNeighbors int, siteAddress string, isBootstrap int) {
+func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int) {
 	// Debug
 	dir, _ := os.Getwd()
 	log.Printf("working dir: %s", dir)
@@ -66,9 +61,9 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, siteAddress stri
 	registre.InitialiseRegistre(siteID, &register)
 
 	networkControler := networkcontroler.NewNetworkControler(
-		siteID, allSiteIDs, &register, nbNeighbors, delayHandler, siteAddress)
+		siteID, allSiteIDs, &register, nbNeighbors, delayHandler)
 
-	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d, SiteAddress: %s\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors, networkControler.SiteAddress)
+	log.Printf("SiteID: %s, Index: %d, All sites: %s, NbVoisins: %d\n", networkControler.SiteID, networkControler.Controler.SiteIndex, allSiteIDs, nbNeighbors)
 
 	go listenStdEntry(eventQueue, &delayHandler)
 	go listenUserUIInput(eventQueue, siteID, networkControler.Controler, &register, isBootstrap)
@@ -77,13 +72,6 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, siteAddress stri
 
 	log.Printf("[EVENT_LOOP] START\n")
 
-	responses := networkControler.HandleIncomingFromLocal("ACTION:INIT_FIND_NEIGHBORS\nDEST:" + siteID + "\n\n")
-	for _, r := range responses {
-		eventQueue <- Event{
-			Type: WriteMessage,
-			Data: r,
-		}
-	}
 	// Event loop (bloquante)
 	for {
 		event := <-eventQueue
@@ -95,6 +83,8 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, siteAddress stri
 
 		case WriteMessage:
 			write(event.Data)
+		case WriteMessageFinal:
+			finalLeaving(siteID)
 		}
 	}
 }
@@ -218,9 +208,10 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler
 			}
 
 			var responses []string
+			var isLeaving bool
 			switch event.Source {
 			case FromNetwork:
-				responses = nc.HandleIncomingFromNetwork(cleanRaw)
+				responses, isLeaving = nc.HandleIncomingFromNetwork(cleanRaw)
 			case FromLocalUser:
 				responses = nc.HandleIncomingFromLocal(cleanRaw)
 			}
@@ -231,10 +222,30 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler
 					Data: r,
 				}
 			}
+
+			if isLeaving {
+				eventQueue <- Event{
+					Type: WriteMessageFinal,
+				}
+			}
 		}
 
 		if onUpdate != nil {
 			onUpdate()
 		}
 	}
+}
+
+func finalLeaving(siteID string) {
+	log.Printf("[LEAVING] Debut ARRET site\n")
+	outFifo := fmt.Sprintf("/tmp/network_fifos/out_%s", siteID)
+	killCmd := exec.Command("pkill", "-f", fmt.Sprintf("cat %s", outFifo))
+	if err := killCmd.Run(); err != nil {
+		log.Printf("[LEAVING] Erreur lors du kill du cat|tee de %s : %v\n", siteID, err)
+	} else {
+		log.Printf("[LEAVING] cat|tee de %s tué avec succès\n", siteID)
+	}
+
+	log.Println("[LEAVING] Au revoir !")
+	os.Exit(0)
 }

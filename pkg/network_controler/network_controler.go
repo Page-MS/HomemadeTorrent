@@ -3,9 +3,12 @@ package networkcontroler
 import (
 	"HomemadeTorrent/pkg/control"
 	"HomemadeTorrent/pkg/delay"
+	"HomemadeTorrent/pkg/distributed_file"
 	"HomemadeTorrent/pkg/parser"
 	"HomemadeTorrent/pkg/registre"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
+	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -24,44 +27,42 @@ type NetworkControler struct {
 	Election  *ElectionState
 	ElectedID string
 
-	PeersWaitingToJoin []string
+	PeersWaitingToJoin  []string
+	PeersWaitingToLeave []string
+	CurrentElectionGoal string
 
 	NeighborIDsAndAdresses map[string]string // Map des enfants et leurs adresses (pour gérer le départ)
-	SiteAddress            string
+	NbTeeReceived          int
 }
 
-func NewNetworkControler(siteID string,
-	allSiteIDs []string, r *registre.Registre,
-	nbNeighbors int,
-	delay delay.Delay,
-	siteAddress string,
-) *NetworkControler {
+func NewNetworkControler(siteID string, allSiteIDs []string, r *registre.Registre, nbNeighbors int, delay delay.Delay) *NetworkControler {
 	return &NetworkControler{
 		Controler:              control.NewController(siteID, allSiteIDs, r, &delay),
 		SeenMessages:           make(map[string]bool),
 		SiteID:                 siteID,
-		SiteAddress:            siteAddress,
 		NbNeighbors:            nbNeighbors,
 		Waves:                  make(map[string]*WaveState),
 		PeersWaitingToJoin:     make([]string, 0),
+		PeersWaitingToLeave:    make([]string, 0),
 		NeighborIDsAndAdresses: make(map[string]string),
 	}
 }
 
-func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
+func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) ([]string, bool) {
 	var responses []string
+	isLeaving := false
 
 	// ============= Decodage str -> struct ===============
 	pMsg, err := parser.Decode(raw)
 	if err != nil {
 		log.Printf("[NETWORK CONTROLLER][NETWORK] Erreur decodage: %v\n", err)
-		return responses
+		return responses, isLeaving
 	}
 
 	// ================ Routage ====================
 	if nc.SeenMessages[pMsg.Id] {
 		log.Printf("[NETWORK CONTROLER] Message déjà vu, ignoré (ID: %s)\n", pMsg.Id)
-		return nil
+		return nil, isLeaving
 	}
 
 	processLocal, forward := nc.routeMessage(pMsg)
@@ -70,13 +71,13 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, raw)
 	}
 	if !processLocal {
-		return responses
+		return responses, isLeaving
 	}
 
 	// ============= Logique Network Controler =============
 	// Si le message concerne le reseau
-	// TODO: arrivé, depart
 	switch pMsg.Action {
+	// ============= ELECTION ==============
 	case WAVE:
 		msg := nc.HandleWave(pMsg)
 		responses = append(responses, msg)
@@ -91,16 +92,37 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, msg...)
 	case ELECTED:
 		nc.HandleElected(pMsg)
+	case RELEASE_ELECTION:
+		msg := nc.HandleReleaseElected()
+		responses = append(responses, msg)
+		// ============= DEPART ==============
+	case START_NEIGHBORS_SEARCH:
+		msg := nc.InitFindNeighbors(false)
+		responses = append(responses, msg...)
 	case I_M_NEIGHBOR:
-		nc.HandleIMNeighborMessage(pMsg)
+		isFinished := nc.HandleIMNeighborMessage(pMsg)
+		isLeaver, _ := strconv.ParseBool(pMsg.Payload)
+		if isFinished && isLeaver {
+			msg := nc.HandlePeerAskingToLeave(pMsg)
+			responses = append(responses, msg)
+		}
 	case INIT_FIND_NEIGHBORS:
 		msg := nc.HandleFindNeighbors(pMsg)
 		responses = append(responses, msg)
 	case RECEIVE_NODE_LEAVING:
-		nc.ReceiveLeavingProcess(pMsg)
-	case RELEASE_ELECTION:
-		msg := nc.HandleReleaseElected()
+		msg := nc.ReceiveLeavingProcess(pMsg)
 		responses = append(responses, msg)
+	case PARENT_TEE_UPDATE:
+		msg := nc.HandleTeeUpdate(pMsg)
+		responses = append(responses, msg)
+
+		if nc.NbTeeReceived == nc.NbNeighbors {
+			log.Printf("[LEAVING] ENVOIE SIGNAL ARRET\n")
+			isLeaving = true
+		}
+	case PARENT_TEE_UPDATE_ACK:
+		nc.RestartTee()
+		// ============= ARRIVEE ==============
 	case ASKING_TO_JOIN_NETWORK:
 		msg := nc.HandlePeerAskingToJoin(pMsg)
 		responses = append(responses, msg)
@@ -118,7 +140,7 @@ func (nc *NetworkControler) HandleIncomingFromNetwork(raw string) []string {
 		responses = append(responses, controlerResponse...)
 	}
 
-	return responses
+	return responses, isLeaving
 }
 
 func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
@@ -133,21 +155,25 @@ func (nc *NetworkControler) HandleIncomingFromLocal(raw string) []string {
 
 	// ============= Logique Network Controler =============
 	switch pMsg.Action {
-	case INIT_FIND_NEIGHBORS:
-		log.Printf("[NETWORK CONTROLER][HandleIncomingFromLocal] INIT_FIND_NEIGHBORS reçu, envoi du message à nos voisins\n")
-		msg := nc.InitFindNeighbors()
-		responses = append(responses, msg)
 	case START_WAVE:
 		msg := nc.InitWave(uuid.NewString())
 		responses = append(responses, msg)
 	case START_ELECTION:
-		msg := nc.StartElection()
+		msg := nc.StartElection("")
 		responses = append(responses, msg)
 	case START_LEAVING_PROCESS:
-		msg := nc.StartLeavingProcess()
-		responses = append(responses, msg)
+		msg := nc.InitFindNeighbors(true)
+		responses = append(responses, msg...)
 	case START_ASKING_TO_JOIN_NETWORK:
 		nc.AskPeerToJoinNetwork(pMsg)
+	case string(torrentlogic.DoneWithSCLeaving):
+		msg := nc.StartLeavingProcess(true)
+		responses = append(responses, msg...)
+
+		pMsg.Action = string(distributed_file.SC_LIBERATION)
+		raw, _ = parser.Encode(pMsg)
+		controlerResponse := nc.Controler.HandleIncomingFromLocal(raw)
+		responses = append(responses, controlerResponse...)
 	default:
 		// Si le message ne nous concerne pas
 		controlerResponse := nc.Controler.HandleIncomingFromLocal(raw)
