@@ -33,6 +33,7 @@ const (
 	AskingFromSC           MessageType = "AskingFromSC"
 	StartSC                MessageType = "StartSC"
 	DoneWithSC             MessageType = "DoneWithSC"
+	DoneWithSCLeaving      MessageType = "DoneWithSCLeaving"
 	TransferRelatedMessage MessageType = "TransferRelatedMessage"
 	StartTransfers         MessageType = "StartTransfers"
 	AskingForShasum        MessageType = "AskingForShasum"
@@ -435,7 +436,15 @@ func HandleRegisterUpdateMessage(msg Message, reg *registre.Registre) error {
 	if err != nil {
 		return fmt.Errorf("[TORRENT][ERROR] Update du registre: %v", err)
 	}
-	reg.Merge(remoteReg)
+
+	if msg.DeleteMe {
+		log.Printf("[TORRENT] Remplacement registre\n")
+		*reg = *remoteReg
+	} else {
+		log.Printf("[TORRENT] Merge registre\n")
+		reg.Merge(remoteReg)
+	}
+
 	log.Printf("[TORRENT] Update Register from remote successfuly\n")
 	return nil
 }
@@ -462,6 +471,34 @@ func AddNewUserToTorrentLogic(currentSite string, newUserID string, reg *registr
 		} else {
 			err := fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization ")
 			return err
+		}
+	}
+	return nil
+}
+
+func RemoveUserFromTorrentLogic(currentSite string, leavingUserID string, reg *registre.Registre, outputMessagesChannel chan<- Message, scChan <-chan Message) error {
+	log.Printf("\n[TORRENT] Debut update du registre suite au départ de %s\n", leavingUserID)
+	SendMessageToPeer(AskingFromSC, false, currentSite, "", currentSite, 0, "", 0, "", outputMessagesChannel)
+
+	select {
+	case message := <-scChan:
+		if message.MessageType == StartSC {
+			log.Printf("\n[TORRENT] Received authorization to start critical section\n")
+
+			// Retirer le user de tous les fichiers et parts du registre
+			reg.RemoveUserFromRegister(leavingUserID)
+
+			jsonReg, err := reg.ToJSON()
+			if err != nil {
+				return fmt.Errorf("[TORRENT][ERROR] Erreur sur la transformation du regsitre en JSON : %v\n", err)
+			}
+			SendMessageToPeer(RegisterUpdate, true, currentSite, "", "-1", None, "", 0, jsonReg, outputMessagesChannel)
+			log.Printf("[TORRENT] Send local updated register successfuly\n")
+
+			SendMessageToPeer(DoneWithSCLeaving, false, currentSite, "", currentSite, 0, "", 0, "", outputMessagesChannel)
+
+		} else {
+			return fmt.Errorf("ERROR: Unexpected message received while waiting for a SC authorization")
 		}
 	}
 	return nil

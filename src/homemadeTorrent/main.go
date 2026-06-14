@@ -17,14 +17,22 @@ func main() {
 			"  go run main.go Site1 2 1 Site1 Site2 Site3")
 
 	}
-
+	log.Printf("Arguments: %v\n", args)
 	siteID := args[0]
 	nbNeighborsStr := args[1]
 	bootstrapStr := args[2]
 	allSiteIDs := args[3:]
 
-	nbNeighbors, _ := strconv.Atoi(nbNeighborsStr)
-	bootstrap, _ := strconv.Atoi(bootstrapStr)
+	bootstrap, err := strconv.Atoi(bootstrapStr)
+	if err != nil {
+		log.Fatalf("bootstrap doit être 0 ou 1 : %v", err)
+	}
 
+	nbNeighbors, err := strconv.Atoi(nbNeighborsStr)
+	if err != nil {
+		log.Fatalf("nbNeighbors doit être un entier : %v", err)
+	}
+
+	// Lancement boucle
 	event_loop.Start(allSiteIDs, siteID, nbNeighbors, bootstrap)
 }

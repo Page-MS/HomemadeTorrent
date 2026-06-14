@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -20,6 +21,7 @@ type EventType int
 const (
 	ReadMessage EventType = iota
 	WriteMessage
+	WriteMessageFinal
 )
 
 type EventSource int
@@ -81,6 +83,8 @@ func Start(allSiteIDs []string, siteID string, nbNeighbors int, isBootstrap int)
 
 		case WriteMessage:
 			write(event.Data)
+		case WriteMessageFinal:
+			finalLeaving(siteID)
 		}
 	}
 }
@@ -204,9 +208,10 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler
 			}
 
 			var responses []string
+			var isLeaving bool
 			switch event.Source {
 			case FromNetwork:
-				responses = nc.HandleIncomingFromNetwork(cleanRaw)
+				responses, isLeaving = nc.HandleIncomingFromNetwork(cleanRaw)
 			case FromLocalUser:
 				responses = nc.HandleIncomingFromLocal(cleanRaw)
 			}
@@ -217,10 +222,30 @@ func siteLogic(input <-chan Event, eventQueue chan<- Event, nc *networkcontroler
 					Data: r,
 				}
 			}
+
+			if isLeaving {
+				eventQueue <- Event{
+					Type: WriteMessageFinal,
+				}
+			}
 		}
 
 		if onUpdate != nil {
 			onUpdate()
 		}
 	}
+}
+
+func finalLeaving(siteID string) {
+	log.Printf("[LEAVING] Debut ARRET site\n")
+	outFifo := fmt.Sprintf("/tmp/network_fifos/out_%s", siteID)
+	killCmd := exec.Command("pkill", "-f", fmt.Sprintf("cat %s", outFifo))
+	if err := killCmd.Run(); err != nil {
+		log.Printf("[LEAVING] Erreur lors du kill du cat|tee de %s : %v\n", siteID, err)
+	} else {
+		log.Printf("[LEAVING] cat|tee de %s tué avec succès\n", siteID)
+	}
+
+	log.Println("[LEAVING] Au revoir !")
+	os.Exit(0)
 }

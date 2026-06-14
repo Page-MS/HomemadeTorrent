@@ -2,6 +2,7 @@ package networkcontroler
 
 import (
 	"HomemadeTorrent/pkg/parser"
+	torrentlogic "HomemadeTorrent/pkg/torrentLogic"
 	"log"
 	"os"
 	"slices"
@@ -25,6 +26,11 @@ const (
 	START_ASKING_TO_JOIN_NETWORK = "START_ASKING_TO_JOIN_NETWORK"
 	ASKING_TO_JOIN_NETWORK       = "ASKING_TO_JOIN_NETWORK"
 	NAME_ERROR                   = "NAME_ERROR"
+)
+
+const (
+	JOINING = "JOINING"
+	LEAVING = "LEAVING"
 )
 
 func (nc *NetworkControler) AskPeerToJoinNetwork(pMsg parser.Message) {
@@ -64,14 +70,37 @@ func (nc *NetworkControler) HandlePeerAskingToJoin(pMsg parser.Message) string {
 	nc.PeersWaitingToJoin = append(nc.PeersWaitingToJoin, pMsg.Sender)
 
 	// Tenter une election pour etre en charge de l'ajout du site
-	response := nc.StartElection()
+	response := nc.StartElection(JOINING)
 	if response == "" {
 		log.Printf("[ARRIVEE] Le site ne peux pas gerer l'arrivée d'un site, attente de la libération de l'election...\n")
 	}
 	return response
 }
 
+func (nc *NetworkControler) HandlePeerAskingToLeave(pMsg parser.Message) string {
+	log.Printf("[DEPART] Debut logique de départ de ce site\n")
+	// On stocke pour traitement ultérieur ou post election
+	nc.PeersWaitingToLeave = append(nc.PeersWaitingToLeave, pMsg.Sender)
+
+	// Tenter une election pour etre en charge du départ d'un site
+	response := nc.StartElection(LEAVING)
+	if response == "" {
+		log.Printf("[DEPART] Le site ne peux pas gerer le départ d'un site, attente de la libération de l'election...\n")
+	}
+	return response
+}
+
 func (nc *NetworkControler) HandleElectionResult() []string {
+
+	if nc.CurrentElectionGoal == JOINING {
+		return nc.StartJoiningProcess()
+	} else if nc.CurrentElectionGoal == LEAVING {
+		return nc.StartLeavingProcess(false)
+	}
+	return nil
+}
+
+func (nc *NetworkControler) StartJoiningProcess() []string {
 	var response []string
 
 	fifoOutPath := "/tmp/network_fifos/out_" + nc.SiteID
@@ -139,6 +168,51 @@ func (nc *NetworkControler) HandleElectionResult() []string {
 	}
 	nc.PeersWaitingToJoin = result
 	return response
+}
+
+func (nc *NetworkControler) StartLeavingProcess(isRegisterUpdated bool) []string {
+	//à l'init
+	// On obtient l'adresse de nos enfants BroadcastNeighbors
+	// Les voisins nous répondent en faisant suivre leur adresse Fifo à leurs enfants, etc... jusqu'à ce que tous les descendants aient répondu
+
+	// On contacte notre parent pour signaler notre départ et lui donner les adresses de nos enfants(à la réception on ne traite le msg  que si on est parent du site sender)
+	if isRegisterUpdated {
+
+		var responses []string
+		msg := parser.Message{
+			Sender:  nc.SiteID,
+			Dest:    BROADCAST,
+			Action:  RECEIVE_NODE_LEAVING,
+			Payload: nc.GetChildrenIDsString(),
+		}
+		encoded, err := parser.Encode(msg)
+		if err != nil {
+			log.Printf("[LEAVING] erreur d'encodage : %v\n", err)
+			return nil
+		}
+		responses = append(responses, encoded)
+		responses = append(responses, nc.HandleReleaseElected())
+
+		msgRelease := parser.Message{
+			Sender: nc.SiteID,
+			Dest:   BROADCAST,
+			Action: RELEASE_ELECTION,
+		}
+
+		encodedMsg, err := parser.Encode(msgRelease)
+		if err != nil {
+			log.Printf("[ADD_USER] Erreur encodage RELEASE_ELECTION : %v\n", err)
+			return nil
+		}
+		responses = append(responses, encodedMsg)
+
+		return responses
+	} else {
+		// Mettre ajour le registre pour tout le monde
+		go torrentlogic.RemoveUserFromTorrentLogic(nc.SiteID, nc.SiteID, nc.Controler.Reg, nc.Controler.OutputTorrentChan, nc.Controler.TorrentScChan)
+		nc.PeersWaitingToLeave = nc.PeersWaitingToLeave[1:]
+	}
+	return nil
 }
 
 // Trouve le pipeline (cat + tee) qui lit un FIFO donné
