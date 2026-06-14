@@ -30,7 +30,7 @@ echo "Logs dirigés vers : $LOG_DIR"
 i=1
 for node in $NODES; do
     degree=$(echo "$DEGREES" | cut -d' ' -f$i)
-    go run -C "$PROJECT_DIR" . "$node" "$FIFO_DIR/in_$node" "$degree" 0 $IDS \
+    go run -C "$PROJECT_DIR" . "$node" "$degree" 0 $IDS \
         < "$FIFO_DIR/in_$node" \
         > "$FIFO_DIR/out_$node" \
         2> "$LOG_DIR/$node.log" &
