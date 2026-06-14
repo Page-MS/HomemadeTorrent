@@ -141,10 +141,16 @@
                             class="block bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
                         [ START Election ]
                     </button>
-                     <button @click="sendHook('ACTION:START_ASKING_TO_JOIN_NETWORK\nDEST:{{.SiteID}}\nPAYLOAD_LEN:5\nnode1\n\n')"
-                            class="block bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
-                        [ START Join Network ]
-                        </button>
+					<div class="flex flex-col gap-2 p-2 border-stone-300 border">
+						<label for="">
+							<span>Je veux joindre:</span>
+							<input type="text" x-model="node.tojoin" class="border border-stone-400 p-2">
+						</label>
+						<button @click="joinNetwork()"
+							class="block bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
+							[ START Join Network ]
+						</button>
+					</div>
                     <button @click="sendHook('ACTION:START_LEAVING_PROCESS\nDEST:{{.SiteID}}\n\n')"
                             class="block bg-stone-200 border border-stone-500 py-1 px-2 text-stone-800 hover:bg-stone-300 transition-colors">
                         [ CIAO LES NAZES ]
@@ -158,7 +164,10 @@
                 <div id="logs" class="bg-stone-100 border border-stone-300 p-3 font-mono text-sm max-h-48 overflow-auto">
                     <p x-show="logs.length === 0" class="text-stone-500">No logs yet...</p>
                     <template x-for="log in logs" :key="log.id">
-                        <div class="text-stone-700 border-b border-stone-200 py-1" x-text="log.message"></div>
+						<li class="list-none group text-stone-700 border-b border-stone-200 py-1">
+							<div x-text="log.message"> </div>
+							<span class="group-hover:block hidden text-sm" x-text="log.hover"></span>
+						</li>
                     </template>
                 </div>
             </div>
@@ -185,6 +194,9 @@
                     snapshotDelay_ms: 0,
                     networkDelay_ms: 0
                 },
+				node: {
+					tojoin: '',
+				},
 
                 async init() {
                     this.connectSocket();
@@ -291,7 +303,7 @@
                         this.socket.send(JSON.stringify(wsMsg));
                         this.showStatus('Message sent successfully!', false);
                         this.message = '';
-                        this.addLog('Message sent');
+                        this.addLog('Message sent', msg);
                     } catch (err) {
                         console.error('Error sending message:', err);
                         this.showStatus('Network error while sending', true);
@@ -334,6 +346,16 @@ ${payload}
                     await this.sendMessage(msg);
                 },
 
+				async joinNetwork() {
+					const msg = `ACTION:START_ASKING_TO_JOIN_NETWORK
+DEST:${this.siteId}
+PAYLOAD_LEN:${this.node.tojoin.length}
+${this.node.tojoin}
+`;
+					this.node.tojoin = '';
+					await this.sendMessage(msg);
+				},
+
                 async updateDelay() {
                     this.socket.send(JSON.stringify({
                         type: "update-delay",
@@ -354,10 +376,11 @@ ${payload}
                     }, 3000);
                 },
 
-                addLog(message) {
+                addLog(message, hover) {
                     this.logs.unshift({
                         id: this.logCounter++,
-                        message: `[${new Date().toLocaleTimeString()}] ${message}`
+                        message: `[${new Date().toLocaleTimeString()}] ${message}`,
+						hover
                     });
                     if (this.logs.length > 50) {
                         this.logs.pop();
